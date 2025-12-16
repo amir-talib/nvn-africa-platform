@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -17,28 +17,6 @@ import { cn } from '@/lib/utils';
 import { useAuth } from "@/context/AuthContext";
 import { useToast } from '@/hooks/use-toast';
 
-
-
-const handleLogout = () => {
-  const { logout } = useAuth();
-  const navigate = useNavigate();
-  const { toast } = useToast();
-  // clear client-side auth state
-  try {
-    // If you set axios.defaults.headers.common["Authorization"], clear it
-    // delete axios.defaults.headers.common["Authorization"];
-
-    logout();                // clears context + localStorage
-    toast({                  // optional friendly UI feedback
-      title: "Signed out",
-      description: "You have been logged out.",
-    });
-    navigate("/");           // send user to homepage (or /login)
-  } catch (err) {
-    console.error("Logout error:", err);
-  }
-};
-
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: Users, label: 'Volunteers', path: '/volunteers' },
@@ -50,14 +28,36 @@ const navItems = [
   { icon: Settings, label: 'Settings', path: '/settings' },
 ];
 
-export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
+interface SidebarProps {
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
+}
+
+export function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+  const { toast } = useToast();
+
+  const activePath = useMemo(() => location.pathname, [location.pathname]);
+
+  const handleLogout = () => {
+    try {
+      logout();
+      toast({
+        title: "Signed out",
+        description: "You have been logged out.",
+      });
+      navigate("/");
+    } catch (err) {
+      console.error("Logout error:", err);
+    }
+  };
 
   return (
     <aside
       className={cn(
-        'fixed left-0 top-0 z-40 h-screen bg-sidebar transition-all duration-300 flex flex-col',
+        'h-full bg-sidebar transition-all duration-300 flex flex-col',
         collapsed ? 'w-20' : 'w-64'
       )}
     >
@@ -81,7 +81,7 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-3 py-6 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
-          const isActive = location.pathname === item.path;
+          const isActive = activePath === item.path;
           return (
             <NavLink
               key={item.path}
@@ -103,7 +103,7 @@ export function Sidebar() {
       {/* Collapse Toggle */}
       <div className="p-3 border-t border-sidebar-border">
         <button
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={() => onCollapsedChange(!collapsed)}
           className="flex items-center gap-3 w-full px-3 py-3 rounded-lg text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
         >
           {collapsed ? (
@@ -119,7 +119,10 @@ export function Sidebar() {
 
       {/* Logout */}
       <div className="p-3 border-t border-sidebar-border">
-        <button onClick={handleLogout} >
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-3 w-full px-3 py-3 rounded-lg text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+        >
           <LogOut className={cn('w-5 h-5', collapsed && 'mx-auto')} />
           {!collapsed && <span className="font-medium">Logout</span>}
         </button>

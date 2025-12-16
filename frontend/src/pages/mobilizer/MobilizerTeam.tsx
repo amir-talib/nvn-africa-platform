@@ -4,89 +4,38 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
-import { 
-  Phone, 
-  Mail, 
-  MessageSquare, 
+import {
+  Phone,
+  Mail,
+  MessageSquare,
   Star,
   TrendingUp,
   Clock,
-  CheckCircle
+  CheckCircle,
+  Loader2
 } from 'lucide-react';
+import { useAllUsers } from '@/hooks/useUser';
 
 const MobilizerTeam = () => {
-  const teamMembers = [
-    {
-      id: 1,
-      name: 'Sarah Okonkwo',
-      email: 'sarah.o@email.com',
-      phone: '+234 801 234 5678',
-      role: 'Field Volunteer',
-      status: 'active',
-      avatar: 'SO',
-      performance: 92,
-      hoursContributed: 48,
-      tasksCompleted: 24,
-      projectsJoined: 3,
-      rating: 4.8,
-    },
-    {
-      id: 2,
-      name: 'James Mwangi',
-      email: 'james.m@email.com',
-      phone: '+254 712 345 678',
-      role: 'Team Lead',
-      status: 'active',
-      avatar: 'JM',
-      performance: 95,
-      hoursContributed: 72,
-      tasksCompleted: 36,
-      projectsJoined: 5,
-      rating: 4.9,
-    },
-    {
-      id: 3,
-      name: 'Daniel Eze',
-      email: 'daniel.e@email.com',
-      phone: '+234 802 345 6789',
-      role: 'Field Volunteer',
-      status: 'active',
-      avatar: 'DE',
-      performance: 88,
-      hoursContributed: 36,
-      tasksCompleted: 18,
-      projectsJoined: 4,
-      rating: 4.5,
-    },
-    {
-      id: 4,
-      name: 'Emmanuel Asante',
-      email: 'emmanuel.a@email.com',
-      phone: '+233 244 567 890',
-      role: 'Field Volunteer',
-      status: 'active',
-      avatar: 'EA',
-      performance: 90,
-      hoursContributed: 56,
-      tasksCompleted: 28,
-      projectsJoined: 6,
-      rating: 4.7,
-    },
-    {
-      id: 5,
-      name: 'David Osei',
-      email: 'david.o@email.com',
-      phone: '+233 277 890 123',
-      role: 'Team Lead',
-      status: 'active',
-      avatar: 'DO',
-      performance: 96,
-      hoursContributed: 84,
-      tasksCompleted: 42,
-      projectsJoined: 8,
-      rating: 5.0,
-    },
-  ];
+  // Fetch real volunteers from MongoDB
+  const { data: usersData, isLoading, error } = useAllUsers({ role: 'volunteer' });
+
+  // Transform backend data to team members format
+  const teamMembers = (usersData?.data || []).map((user: any) => ({
+    id: user._id,
+    name: `${user.firstname || ''} ${user.lastname || ''}`.trim() || 'Unknown',
+    email: user.email || 'No email',
+    phone: user.phone || 'No phone',
+    role: user.rank?.replace(/_/g, ' ') || 'Volunteer',
+    status: user.isBanned ? 'inactive' : user.isApproved ? 'active' : 'pending',
+    avatar: `${(user.firstname || 'U')[0]}${(user.lastname || 'V')[0]}`,
+    profilePicture: user.profile_picture,
+    performance: 80, // Would need performance tracking API
+    hoursContributed: user.total_hours || 0,
+    tasksCompleted: 0,
+    projectsJoined: user.no_of_projects_done || 0,
+    rating: 0,
+  }));
 
   const getPerformanceColor = (performance: number) => {
     if (performance >= 90) return 'text-success';
@@ -94,10 +43,38 @@ const MobilizerTeam = () => {
     return 'text-warning';
   };
 
+  if (isLoading) {
+    return (
+      <>
+        <MobilizerHeader title="My Team" subtitle="Loading..." />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-mobilizer" />
+        </div>
+      </>
+    );
+  }
+
+  if (error) {
+    return (
+      <>
+        <MobilizerHeader title="My Team" subtitle="Error" />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <Card className="max-w-md">
+            <CardContent className="p-6 text-center">
+              <p className="text-destructive mb-4">Failed to load team members.</p>
+              <Button onClick={() => window.location.reload()}>Retry</Button>
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    );
+  }
+
+
   return (
     <>
       <MobilizerHeader title="My Team" subtitle="Your volunteer team performance" />
-      
+
       <div className="flex-1 overflow-auto p-6 space-y-6">
         {/* Team Overview */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

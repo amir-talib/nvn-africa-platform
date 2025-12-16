@@ -8,13 +8,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Shield, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import axios from "axios";
+import { api } from "@/lib/api";
 
 const AdminAuth = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [loginData, setLoginData] = useState({ email: "", password: "" });
-  
+
 
   const { login } = useAuth();
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -24,30 +24,45 @@ const AdminAuth = () => {
     setErrors({});
     setIsLoading(true);
     try {
-      // Build payload from signupData
+      // Validate inputs
+      if (!loginData.email || !loginData.password) {
+        const errorMsg = "Please enter both email and password";
+        setErrors({ general: errorMsg });
+        toast.error(errorMsg);
+        setIsLoading(false);
+        return;
+      }
+
       const payload = {
         email: loginData.email,
         password: loginData.password,
       };
 
-      const response = await axios.post("http://localhost:3000/api/auth/login", payload);
+      const response = await api.post(`/auth/login`, payload);
       console.debug("Login response:", response);
 
       if (response.data?.success) {
-        login(response.data.user, response.data.token);
-        console.log(response.data.user.role)
-        if (response.data.user.role === "admin") {
-          navigate("/dashboard")
-        } else {
-          navigate("/volunteer")
+        // Verify this is an admin user
+        if (response.data.user.role !== "admin") {
+          const errorMsg = "Access denied. Admin credentials required.";
+          setErrors({ general: errorMsg });
+          toast.error(errorMsg);
+          setIsLoading(false);
+          return;
         }
 
+        toast.success("Login successful!");
+        login(response.data.user, response.data.token);
+        navigate("/dashboard");
       } else {
-        setErrors({ general: response.data?.message || "Login failed" });
-
+        const errorMsg = response.data?.message || "Login failed";
+        setErrors({ general: errorMsg });
+        toast.error(errorMsg);
       }
     } catch (error: any) {
-      setErrors({ general: error?.response?.data?.message || "An error occurred during login" });
+      const errorMsg = error?.response?.data?.message || "An error occurred during login";
+      setErrors({ general: errorMsg });
+      toast.error(errorMsg);
       console.error("Login error response:", error?.response ?? error);
     } finally {
       setIsLoading(false);
@@ -77,7 +92,6 @@ const AdminAuth = () => {
             <CardDescription>NAMYO Africa Administration</CardDescription>
           </CardHeader>
           <CardContent>
-
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="login-email">Email</Label>
@@ -104,6 +118,9 @@ const AdminAuth = () => {
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Signing in..." : "Sign In"}
               </Button>
+              {errors.general && (
+                <p className="text-destructive text-sm text-center">{errors.general}</p>
+              )}
             </form>
           </CardContent>
         </Card>

@@ -35,17 +35,26 @@ export const view_my_created_project = async (req, res) => {
 
 export const view_all_project_requests = async (req, res) => {
     try {
-        const userId = req.user._id;
+        const { status } = req.query;
 
-        const all_projects_requests = await ProjectRequest.find().sort({ createdAt: -1 });
+        let query = {};
+        if (status && status !== 'all') {
+            query.status = status;
+        }
+
+        const all_projects_requests = await ProjectRequest.find(query)
+            .populate('volunteer', 'firstname lastname email phone address profile_picture skills')
+            .populate('project', 'title description location start_date end_date status')
+            .sort({ createdAt: -1 });
+
         return res.status(200).json({
             success: true,
-            message: `These are my projects.`,
+            message: `Project requests fetched successfully.`,
             count: all_projects_requests.length,
             data: all_projects_requests
         });
     } catch (error) {
-        res.status(500).json({ message: "Error in update_project controller", error });
+        res.status(500).json({ message: "Error in view_all_project_requests controller", error: error.message });
     }
 }
 

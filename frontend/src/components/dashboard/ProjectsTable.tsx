@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { MoreHorizontal, Eye, Edit, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Eye, Edit, Trash2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -16,96 +16,48 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { useEffect, useState } from 'react';
-import axios from 'axios';
-
-
-// const projects = [
-//   {
-//     id: 1,
-//     name: 'Youth Education Initiative',
-//     status: 'active',
-//     startDate: '2024-01-15',
-//     endDate: '2024-06-30',
-//     lead: { name: 'Sarah Johnson', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100' },
-//     volunteers: 24,
-//   },
-//   {
-//     id: 2,
-//     name: 'Community Health Outreach',
-//     status: 'completed',
-//     startDate: '2023-09-01',
-//     endDate: '2024-02-28',
-//     lead: { name: 'Michael Chen', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' },
-//     volunteers: 18,
-//   },
-//   {
-//     id: 3,
-//     name: 'Environmental Cleanup',
-//     status: 'pending',
-//     startDate: '2024-03-01',
-//     endDate: '2024-05-15',
-//     lead: { name: 'Amara Okonkwo', avatar: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=100' },
-//     volunteers: 32,
-//   },
-//   {
-//     id: 4,
-//     name: 'Tech Skills Workshop',
-//     status: 'active',
-//     startDate: '2024-02-01',
-//     endDate: '2024-08-31',
-//     lead: { name: 'David Mensah', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100' },
-//     volunteers: 15,
-//   },
-// ];
+import { useProjects } from '@/hooks/useProjects';
 
 const statusColors: Record<string, string> = {
+  ongoing: 'bg-success/10 text-success border-success/20',
   active: 'bg-success/10 text-success border-success/20',
   completed: 'bg-muted text-muted-foreground border-muted',
+  upcoming: 'bg-warning/10 text-warning border-warning/20',
   pending: 'bg-warning/10 text-warning border-warning/20',
 };
 
 interface ProjectsTableProps {
-  onViewProject?: (id: number) => void;
-  onEditProject?: (id: number) => void;
+  onViewProject?: (id: string) => void;
+  onEditProject?: (id: string) => void;
 }
 
 export function ProjectsTable({ onViewProject, onEditProject }: ProjectsTableProps) {
   const navigate = useNavigate();
-  const [projects, setProjects] = useState([]);
+  const { data: projects = [], isLoading, error } = useProjects();
 
-  useEffect(() => {
-    const token = localStorage.getItem("inv-token");
+  if (isLoading) {
+    return (
+      <div className="rounded-xl bg-card card-shadow p-8 flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
 
+  if (error) {
+    return (
+      <div className="rounded-xl bg-card card-shadow p-8 text-center text-destructive">
+        Failed to load projects
+      </div>
+    );
+  }
 
-    const fetchProjects = async () => {
-      try {
-
-
-        // 🟢 Online: Fetch fresh data
-        const response = await axios.get(`localhost:3000/api/project/`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (response.data.projects) {
-          setProjects(response.data.projects);
-          localStorage.setItem(
-            "cachedProjects",
-            JSON.stringify(response.data.projects)
-          );
-          console.log("✅ projects cached locally");
-        }
-      } catch (error) {
-        console.error("Error fetching projects:", error);
-      }
-    };
-
-
-
-    fetchProjects();
-
-  }, [])
+  if (projects.length === 0) {
+    return (
+      <div className="rounded-xl bg-card card-shadow p-8 text-center text-muted-foreground">
+        No projects yet. Create your first project!
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl bg-card card-shadow overflow-hidden">
@@ -115,37 +67,31 @@ export function ProjectsTable({ onViewProject, onEditProject }: ProjectsTablePro
             <TableHead className="font-semibold">Project Name</TableHead>
             <TableHead className="font-semibold">Status</TableHead>
             <TableHead className="font-semibold hidden md:table-cell">Duration</TableHead>
-            <TableHead className="font-semibold hidden lg:table-cell">Project Lead</TableHead>
+            <TableHead className="font-semibold hidden lg:table-cell">Location</TableHead>
             <TableHead className="font-semibold hidden sm:table-cell">Volunteers</TableHead>
             <TableHead className="font-semibold text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {projects.map((project) => (
+          {projects.map((project: any) => (
             <TableRow
-              key={project.id}
+              key={project._id}
               className="hover:bg-muted/30 transition-colors cursor-pointer"
-              onClick={() => navigate(`/projects/${project.id}`)}
+              onClick={() => navigate(`/projects/${project._id}`)}
             >
-              <TableCell className="font-medium">{project.name}</TableCell>
+              <TableCell className="font-medium">{project.title}</TableCell>
               <TableCell>
-                <Badge variant="outline" className={statusColors[project.status]}>
-                  {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+                <Badge variant="outline" className={statusColors[project.status] || statusColors.pending}>
+                  {project.status?.charAt(0).toUpperCase() + project.status?.slice(1)}
                 </Badge>
               </TableCell>
               <TableCell className="hidden md:table-cell text-muted-foreground">
-                {new Date(project.startDate).toLocaleDateString()} - {new Date(project.endDate).toLocaleDateString()}
+                {project.start_date ? new Date(project.start_date).toLocaleDateString() : 'TBD'} - {project.end_date ? new Date(project.end_date).toLocaleDateString() : 'TBD'}
               </TableCell>
-              <TableCell className="hidden lg:table-cell">
-                <div className="flex items-center gap-2">
-                  <Avatar className="w-7 h-7">
-                    <AvatarImage src={project.lead.avatar} />
-                    <AvatarFallback>{project.lead.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
-                  </Avatar>
-                  <span className="text-sm">{project.lead.name}</span>
-                </div>
+              <TableCell className="hidden lg:table-cell text-muted-foreground">
+                {project.location || '-'}
               </TableCell>
-              <TableCell className="hidden sm:table-cell">{project.volunteers}</TableCell>
+              <TableCell className="hidden sm:table-cell">{project.volunteers?.length || 0}</TableCell>
               <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -154,11 +100,11 @@ export function ProjectsTable({ onViewProject, onEditProject }: ProjectsTablePro
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => onViewProject?.(project.id)}>
+                    <DropdownMenuItem onClick={() => onViewProject?.(project._id) || navigate(`/projects/${project._id}`)}>
                       <Eye className="w-4 h-4 mr-2" />
                       View Details
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onEditProject?.(project.id)}>
+                    <DropdownMenuItem onClick={() => onEditProject?.(project._id)}>
                       <Edit className="w-4 h-4 mr-2" />
                       Edit
                     </DropdownMenuItem>

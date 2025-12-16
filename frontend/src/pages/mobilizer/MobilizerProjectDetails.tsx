@@ -5,9 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
-import { 
-  ArrowLeft, 
-  MapPin, 
+import {
+  ArrowLeft,
+  MapPin,
   Calendar,
   Clock,
   Users,
@@ -15,66 +15,25 @@ import {
   AlertCircle,
   Target,
   FileText,
-  MessageSquare
+  MessageSquare,
+  Loader2
 } from 'lucide-react';
+import { useProjectById, useProjectVolunteers } from '@/hooks/useProjects';
+
 
 const MobilizerProjectDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  // Mock project data
-  const project = {
-    id: Number(id),
-    name: 'Community Health Camp',
-    description: 'A comprehensive community health initiative providing free health screenings, vaccinations, and health education to underserved communities in Lagos.',
-    status: 'ongoing',
-    progress: 65,
-    location: 'Lagos Community Center, Victoria Island',
-    startDate: 'Dec 15, 2024',
-    endDate: 'Dec 20, 2024',
-    totalHours: 240,
-    hoursLogged: 156,
-    objectives: [
-      'Provide free health screenings to 500+ community members',
-      'Distribute health education materials',
-      'Conduct vaccination drives for children',
-      'Offer nutritional counseling sessions'
-    ],
-    team: [
-      { id: 1, name: 'Sarah Okonkwo', role: 'Field Lead', status: 'active', avatar: 'SO' },
-      { id: 2, name: 'James Mwangi', role: 'Coordinator', status: 'active', avatar: 'JM' },
-      { id: 3, name: 'Fatima Ahmed', role: 'Support', status: 'active', avatar: 'FA' },
-      { id: 4, name: 'Daniel Eze', role: 'Field Volunteer', status: 'active', avatar: 'DE' },
-      { id: 5, name: 'Grace Nyambura', role: 'Documentation', status: 'pending', avatar: 'GN' },
-    ],
-    tasks: [
-      { id: 1, name: 'Set up health screening stations', status: 'completed', assignee: 'Sarah O.' },
-      { id: 2, name: 'Coordinate volunteer schedules', status: 'completed', assignee: 'James M.' },
-      { id: 3, name: 'Prepare educational materials', status: 'ongoing', assignee: 'Fatima A.' },
-      { id: 4, name: 'Arrange transportation', status: 'ongoing', assignee: 'Daniel E.' },
-      { id: 5, name: 'Document event activities', status: 'pending', assignee: 'Grace N.' },
-    ],
-    milestones: [
-      { name: 'Planning Phase', date: 'Nov 20', status: 'completed' },
-      { name: 'Team Assembly', date: 'Dec 1', status: 'completed' },
-      { name: 'Resource Procurement', date: 'Dec 10', status: 'completed' },
-      { name: 'Event Kickoff', date: 'Dec 15', status: 'ongoing' },
-      { name: 'Final Report', date: 'Dec 25', status: 'pending' },
-    ],
-    stats: {
-      volunteers: 8,
-      tasksTotal: 15,
-      tasksCompleted: 10,
-      beneficiaries: 320
-    }
-  };
+  // Fetch real project data from MongoDB
+  const { data: projectData, isLoading, error } = useProjectById(id);
+  const { data: volunteers } = useProjectVolunteers(id);
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'ongoing': return 'bg-mobilizer/10 text-mobilizer';
+      case 'ongoing': case 'active': return 'bg-mobilizer/10 text-mobilizer';
       case 'completed': return 'bg-success/10 text-success';
       case 'pending': return 'bg-warning/10 text-warning-foreground';
-      case 'active': return 'bg-success/10 text-success';
       default: return 'bg-muted text-muted-foreground';
     }
   };
@@ -87,14 +46,73 @@ const MobilizerProjectDetails = () => {
     }
   };
 
+  if (isLoading) {
+    return (
+      <>
+        <MobilizerHeader title="Project Details" subtitle="Loading..." />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-mobilizer" />
+        </div>
+      </>
+    );
+  }
+
+  if (error || !projectData) {
+    return (
+      <>
+        <MobilizerHeader title="Project Details" subtitle="Error" />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <Card className="max-w-md">
+            <CardContent className="p-6 text-center">
+              <p className="text-destructive mb-4">Failed to load project details.</p>
+              <Button onClick={() => navigate('/mobilizer/projects')}>Back to Projects</Button>
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    );
+  }
+
+  // Transform project data
+  const project = {
+    id: projectData._id,
+    name: projectData.title,
+    description: projectData.description || 'No description available.',
+    status: projectData.status || 'upcoming',
+    progress: projectData.status === 'completed' ? 100 : projectData.status === 'ongoing' || projectData.status === 'active' ? 50 : 0,
+    location: projectData.location || 'Location TBD',
+    startDate: projectData.start_date ? new Date(projectData.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD',
+    endDate: projectData.end_date ? new Date(projectData.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD',
+    totalHours: projectData.neededVolunteers ? projectData.neededVolunteers * 20 : 200,
+    hoursLogged: 0,
+    objectives: projectData.requirements || [],
+    team: (volunteers || []).map((v: any) => ({
+      id: v._id,
+      name: `${v.firstname || ''} ${v.lastname || ''}`.trim() || 'Unknown',
+      role: v.rank?.replace(/_/g, ' ') || 'Volunteer',
+      status: v.isApproved ? 'active' : 'pending',
+      avatar: `${(v.firstname || 'U')[0]}${(v.lastname || 'V')[0]}`,
+      profilePicture: v.profile_picture,
+    })),
+    tasks: [],
+    milestones: [],
+    stats: {
+      volunteers: (volunteers || []).length,
+      tasksTotal: projectData.requirements?.length || 0,
+      tasksCompleted: 0,
+      beneficiaries: 0
+    }
+  };
+
   return (
+
     <>
       <MobilizerHeader title="Project Details" subtitle={project.name} />
-      
+
       <div className="flex-1 overflow-auto p-6 space-y-6">
         {/* Back Button */}
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           onClick={() => navigate('/mobilizer/projects')}
           className="text-muted-foreground hover:text-foreground"
         >
@@ -112,7 +130,7 @@ const MobilizerProjectDetails = () => {
                   <Badge className={getStatusColor(project.status)}>{project.status}</Badge>
                 </div>
                 <p className="text-muted-foreground mb-4">{project.description}</p>
-                
+
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <MapPin className="w-4 h-4" />
@@ -132,7 +150,7 @@ const MobilizerProjectDetails = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex gap-2">
                 <Button variant="outline" className="text-mobilizer border-mobilizer hover:bg-mobilizer-accent">
                   <FileText className="w-4 h-4 mr-2" />
@@ -220,8 +238,8 @@ const MobilizerProjectDetails = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               {project.team.map((member) => (
-                <div 
-                  key={member.id} 
+                <div
+                  key={member.id}
                   className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
                   onClick={() => navigate(`/mobilizer/volunteers/${member.id}`)}
                 >
@@ -279,10 +297,9 @@ const MobilizerProjectDetails = () => {
                 {project.milestones.map((milestone, index) => (
                   <div key={index} className="flex items-start gap-4 pb-6 last:pb-0">
                     <div className="relative">
-                      <div className={`w-4 h-4 rounded-full ${
-                        milestone.status === 'completed' ? 'bg-success' : 
+                      <div className={`w-4 h-4 rounded-full ${milestone.status === 'completed' ? 'bg-success' :
                         milestone.status === 'ongoing' ? 'bg-mobilizer' : 'bg-muted'
-                      }`} />
+                        }`} />
                       {index < project.milestones.length - 1 && (
                         <div className="absolute top-4 left-1.5 w-0.5 h-full bg-border" />
                       )}

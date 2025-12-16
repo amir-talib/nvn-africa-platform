@@ -3,12 +3,18 @@ import User from "../models/User.model.js";
 
 export const verifyToken = async (req, res, next) => {
     try {
-        let token;
-        let authHeader = req.headers.Authorization || req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith("Bearer")) {
-            return res.status(401).json({ message: "No token provided" });
+        let token = null;
+
+        // 1) Prefer Authorization header (used by the frontend)
+        const authHeader = req.headers.authorization || req.headers.Authorization;
+        if (authHeader && typeof authHeader === "string" && authHeader.startsWith("Bearer ")) {
+            token = authHeader.split(" ")[1];
         }
-        token = authHeader.split(" ")[1];
+
+        // 2) Fallback to httpOnly cookie (server sets this on login)
+        if (!token && req.cookies?.token) {
+            token = req.cookies.token;
+        }
 
         if (!token) {
             return res.status(401).json({ message: "No token, authorization denied" });
@@ -16,14 +22,17 @@ export const verifyToken = async (req, res, next) => {
 
         const decode = jwt.verify(token, process.env.JWT_SECRET);
 
-        const user = await User.findById(decode.id).select("-password");
+        // Token payload historically used different keys; support both for robustness.
+        const userId = decode?.userId || decode?.id;
+        if (!userId) return res.status(401).json({ message: "Invalid token payload" });
+
+        const user = await User.findById(userId).select("-password");
         if (!user) return res.status(401).json({ message: "Invalid token user" });
 
         req.user = user;
-        console.log("The decoded user is: ", req.user);
         next();
     } catch (error) {
-        res.status(400).json({ message: "Token is not valid" })
+        res.status(401).json({ message: "Token is not valid" })
     }
 
 }

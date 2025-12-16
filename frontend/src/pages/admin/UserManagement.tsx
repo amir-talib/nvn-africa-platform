@@ -1,21 +1,25 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
-import { 
-  Search, 
-  UserCheck, 
-  UserX, 
-  Clock, 
-  CheckCircle, 
+import {
+  Search,
+  UserCheck,
+  UserX,
+  Clock,
+  CheckCircle,
   XCircle,
   Filter,
-  MoreHorizontal
+  MoreHorizontal,
+  Loader2,
+  Eye,
+  Ban
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -24,72 +28,72 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: "admin" | "mobilizer" | "volunteer";
-  status: "pending" | "approved" | "rejected";
-  registeredAt: string;
-}
-
-// Mock data - replace with actual data from Lovable Cloud
-const mockUsers: User[] = [
-  { id: "1", name: "John Doe", email: "john@example.com", role: "volunteer", status: "pending", registeredAt: "2024-01-15" },
-  { id: "2", name: "Jane Smith", email: "jane@example.com", role: "mobilizer", status: "pending", registeredAt: "2024-01-14" },
-  { id: "3", name: "Bob Johnson", email: "bob@example.com", role: "volunteer", status: "approved", registeredAt: "2024-01-10" },
-  { id: "4", name: "Alice Brown", email: "alice@example.com", role: "volunteer", status: "rejected", registeredAt: "2024-01-08" },
-  { id: "5", name: "Charlie Wilson", email: "charlie@example.com", role: "mobilizer", status: "approved", registeredAt: "2024-01-05" },
-  { id: "6", name: "Diana Martinez", email: "diana@example.com", role: "volunteer", status: "pending", registeredAt: "2024-01-16" },
-];
+import { useAllUsers, useApproveUser, useBanUser, useUnbanUser } from "@/hooks/useUser";
 
 const UserManagement = () => {
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [roleFilter, setRoleFilter] = useState<string>("all");
 
-  const filteredUsers = users.filter((user) => {
-    const matchesSearch = 
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === "all" || user.status === statusFilter;
-    const matchesRole = roleFilter === "all" || user.role === roleFilter;
-    return matchesSearch && matchesStatus && matchesRole;
+  // Fetch users from API
+  const { data: usersData, isLoading, error, refetch, isFetching } = useAllUsers({
+    search: searchQuery || undefined,
   });
 
-  const pendingCount = users.filter((u) => u.status === "pending").length;
+  const approveUserMutation = useApproveUser();
+  const banUserMutation = useBanUser();
+  const unbanUserMutation = useUnbanUser();
 
-  const handleApprove = (userId: string) => {
-    setUsers((prev) =>
-      prev.map((user) =>
-        user.id === userId ? { ...user, status: "approved" as const } : user
-      )
-    );
-    toast.success("User approved successfully");
-  };
+  const users = usersData?.data || [];
 
-  const handleReject = (userId: string) => {
-    setUsers((prev) =>
-      prev.map((user) =>
-        user.id === userId ? { ...user, status: "rejected" as const } : user
-      )
-    );
-    toast.success("User rejected");
-  };
+  // Filter users locally
+  const filteredUsers = users.filter((user: any) => {
+    const matchesStatus = statusFilter === "all" ||
+      (statusFilter === "pending" && !user.isApproved && !user.isBanned) ||
+      (statusFilter === "approved" && user.isApproved && !user.isBanned) ||
+      (statusFilter === "banned" && user.isBanned);
+    const matchesRole = roleFilter === "all" || user.role === roleFilter;
+    return matchesStatus && matchesRole;
+  });
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "pending":
-        return <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
-      case "approved":
-        return <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50"><CheckCircle className="w-3 h-3 mr-1" />Approved</Badge>;
-      case "rejected":
-        return <Badge variant="outline" className="text-red-600 border-red-300 bg-red-50"><XCircle className="w-3 h-3 mr-1" />Rejected</Badge>;
-      default:
-        return null;
+  const pendingCount = users.filter((u: any) => !u.isApproved && !u.isBanned).length;
+
+  const handleApprove = async (userId: string) => {
+    try {
+      await approveUserMutation.mutateAsync(userId);
+      toast.success("User approved successfully");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to approve user");
     }
+  };
+
+  const handleBan = async (userId: string) => {
+    try {
+      await banUserMutation.mutateAsync(userId);
+      toast.success("User banned");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to ban user");
+    }
+  };
+
+  const handleUnban = async (userId: string) => {
+    try {
+      await unbanUserMutation.mutateAsync(userId);
+      toast.success("User unbanned");
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || "Failed to unban user");
+    }
+  };
+
+  const getStatusBadge = (user: any) => {
+    if (user.isBanned) {
+      return <Badge variant="outline" className="text-red-600 border-red-300 bg-red-50"><Ban className="w-3 h-3 mr-1" />Banned</Badge>;
+    }
+    if (!user.isApproved) {
+      return <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
+    }
+    return <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50"><CheckCircle className="w-3 h-3 mr-1" />Approved</Badge>;
   };
 
   const getRoleBadge = (role: string) => {
@@ -101,9 +105,44 @@ const UserManagement = () => {
       case "volunteer":
         return <Badge className="bg-volunteer-primary/10 text-volunteer-primary border-volunteer-primary/20">Volunteer</Badge>;
       default:
-        return null;
+        return <Badge variant="secondary">{role}</Badge>;
     }
   };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout title="User Management">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    const errorMessage =
+      (error as any)?.response?.data?.message ||
+      (error as any)?.message ||
+      "Failed to load users. Please try again.";
+    return (
+      <DashboardLayout title="User Management">
+        <Card className="max-w-xl">
+          <CardHeader>
+            <CardTitle className="text-destructive">Couldn’t load users</CardTitle>
+            <CardDescription>{errorMessage}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex gap-2">
+            <Button onClick={() => refetch()} disabled={isFetching}>
+              {isFetching ? "Retrying..." : "Retry"}
+            </Button>
+            <Button variant="outline" onClick={() => navigate("/dashboard")}>
+              Back to Dashboard
+            </Button>
+          </CardContent>
+        </Card>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="User Management">
@@ -112,7 +151,7 @@ const UserManagement = () => {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-foreground">User Management</h1>
-            <p className="text-muted-foreground">Approve or reject user registrations</p>
+            <p className="text-muted-foreground">Manage and approve user registrations</p>
           </div>
           {pendingCount > 0 && (
             <Card className="bg-amber-50 border-amber-200">
@@ -122,6 +161,38 @@ const UserManagement = () => {
               </CardContent>
             </Card>
           )}
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-sm text-muted-foreground">Total Users</p>
+              <p className="text-2xl font-bold">{users.length}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-sm text-muted-foreground">Pending</p>
+              <p className="text-2xl font-bold text-warning">{pendingCount}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-sm text-muted-foreground">Approved</p>
+              <p className="text-2xl font-bold text-success">
+                {users.filter((u: any) => u.isApproved && !u.isBanned).length}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-sm text-muted-foreground">Banned</p>
+              <p className="text-2xl font-bold text-destructive">
+                {users.filter((u: any) => u.isBanned).length}
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Filters */}
@@ -147,7 +218,7 @@ const UserManagement = () => {
                     <SelectItem value="all">All Status</SelectItem>
                     <SelectItem value="pending">Pending</SelectItem>
                     <SelectItem value="approved">Approved</SelectItem>
-                    <SelectItem value="rejected">Rejected</SelectItem>
+                    <SelectItem value="banned">Banned</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={roleFilter} onValueChange={setRoleFilter}>
@@ -187,32 +258,36 @@ const UserManagement = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => (
-                  <TableRow key={user.id}>
+                {filteredUsers.map((user: any) => (
+                  <TableRow key={user._id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <Avatar className="h-9 w-9">
+                          <AvatarImage src={user.profile_picture} />
                           <AvatarFallback className="bg-primary/10 text-primary">
-                            {user.name.split(" ").map((n) => n[0]).join("")}
+                            {user.firstname?.[0]}{user.lastname?.[0]}
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <p className="font-medium">{user.name}</p>
+                          <p className="font-medium">{user.firstname} {user.lastname}</p>
                           <p className="text-sm text-muted-foreground">{user.email}</p>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>{getRoleBadge(user.role)}</TableCell>
-                    <TableCell>{getStatusBadge(user.status)}</TableCell>
-                    <TableCell className="text-muted-foreground">{user.registeredAt}</TableCell>
+                    <TableCell>{getStatusBadge(user)}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
+                    </TableCell>
                     <TableCell className="text-right">
-                      {user.status === "pending" ? (
+                      {!user.isApproved && !user.isBanned ? (
                         <div className="flex items-center justify-end gap-2">
                           <Button
                             size="sm"
                             variant="outline"
                             className="text-green-600 border-green-300 hover:bg-green-50"
-                            onClick={() => handleApprove(user.id)}
+                            onClick={() => handleApprove(user._id)}
+                            disabled={approveUserMutation.isPending}
                           >
                             <UserCheck className="w-4 h-4 mr-1" />
                             Approve
@@ -221,10 +296,11 @@ const UserManagement = () => {
                             size="sm"
                             variant="outline"
                             className="text-red-600 border-red-300 hover:bg-red-50"
-                            onClick={() => handleReject(user.id)}
+                            onClick={() => handleBan(user._id)}
+                            disabled={banUserMutation.isPending}
                           >
                             <UserX className="w-4 h-4 mr-1" />
-                            Reject
+                            Ban
                           </Button>
                         </div>
                       ) : (
@@ -235,16 +311,19 @@ const UserManagement = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {user.status === "rejected" && (
-                              <DropdownMenuItem onClick={() => handleApprove(user.id)}>
+                            <DropdownMenuItem onClick={() => navigate(`/volunteers/${user._id}`)}>
+                              <Eye className="w-4 h-4 mr-2" />
+                              View Details
+                            </DropdownMenuItem>
+                            {user.isBanned ? (
+                              <DropdownMenuItem onClick={() => handleUnban(user._id)}>
                                 <UserCheck className="w-4 h-4 mr-2" />
-                                Approve User
+                                Unban User
                               </DropdownMenuItem>
-                            )}
-                            {user.status === "approved" && (
-                              <DropdownMenuItem onClick={() => handleReject(user.id)} className="text-red-600">
-                                <UserX className="w-4 h-4 mr-2" />
-                                Revoke Access
+                            ) : (
+                              <DropdownMenuItem onClick={() => handleBan(user._id)} className="text-red-600">
+                                <Ban className="w-4 h-4 mr-2" />
+                                Ban User
                               </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>

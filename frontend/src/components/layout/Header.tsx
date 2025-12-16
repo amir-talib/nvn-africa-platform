@@ -13,6 +13,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
 
 interface HeaderProps {
   title: string;
@@ -21,6 +22,7 @@ interface HeaderProps {
 
 export function Header({ title, onMenuClick }: HeaderProps) {
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [notifications] = useState([
     { id: 1, title: 'New volunteer request', time: '5 min ago' },
     { id: 2, title: 'Project deadline approaching', time: '1 hour ago' },
@@ -85,12 +87,14 @@ export function Header({ title, onMenuClick }: HeaderProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="flex items-center gap-2 px-2">
               <Avatar className="w-8 h-8">
-                <AvatarImage src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop" />
-                <AvatarFallback>AD</AvatarFallback>
+                <AvatarImage src={undefined} />
+                <AvatarFallback>
+                  {(user?.username?.[0] || user?.email?.[0] || "U").toUpperCase()}
+                </AvatarFallback>
               </Avatar>
               <div className="hidden md:block text-left">
-                <p className="text-sm font-medium">Admin User</p>
-                <p className="text-xs text-muted-foreground">admin@namyo.org</p>
+                <p className="text-sm font-medium">{user?.username || "User"}</p>
+                <p className="text-xs text-muted-foreground">{user?.email || ""}</p>
               </div>
               <ChevronDown className="w-4 h-4 text-muted-foreground hidden md:block" />
             </Button>
@@ -101,7 +105,15 @@ export function Header({ title, onMenuClick }: HeaderProps) {
             <DropdownMenuItem>Profile</DropdownMenuItem>
             <DropdownMenuItem>Settings</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive">Log out</DropdownMenuItem>
+            <DropdownMenuItem
+              className="text-destructive"
+              onClick={() => {
+                logout();
+                navigate("/");
+              }}
+            >
+              Log out
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

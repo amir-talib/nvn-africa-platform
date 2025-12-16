@@ -6,80 +6,46 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Calendar, 
-  Users, 
-  MapPin, 
-  Clock, 
+import {
+  Calendar,
+  Users,
+  MapPin,
   ArrowRight,
   CheckCircle,
-  AlertCircle
+  Loader2
 } from 'lucide-react';
+import { useProjects, useProjectVolunteers } from '@/hooks/useProjects';
 
 const MobilizerProjects = () => {
   const navigate = useNavigate();
-  const projects = [
-    {
-      id: 1,
-      name: 'Community Health Camp',
-      description: 'Free health screening and medical assistance for rural communities',
-      status: 'ongoing',
-      progress: 65,
-      startDate: 'Dec 15, 2024',
-      endDate: 'Dec 20, 2024',
-      location: 'Nairobi, Kenya',
-      volunteers: 8,
-      maxVolunteers: 10,
-      tasks: { completed: 12, total: 18 },
-      teamMembers: ['SO', 'JM', 'DE', 'EA'],
-    },
-    {
-      id: 2,
-      name: 'Youth Education Drive',
-      description: 'After-school tutoring and mentorship program for underprivileged youth',
-      status: 'upcoming',
-      progress: 0,
-      startDate: 'Dec 25, 2024',
-      endDate: 'Jan 10, 2025',
-      location: 'Lagos, Nigeria',
-      volunteers: 12,
-      maxVolunteers: 15,
-      tasks: { completed: 0, total: 20 },
-      teamMembers: ['FA', 'GN', 'AD'],
-    },
-    {
-      id: 3,
-      name: 'Environmental Clean-up',
-      description: 'Beach and riverside cleaning initiative with recycling education',
-      status: 'ongoing',
-      progress: 40,
-      startDate: 'Dec 18, 2024',
-      endDate: 'Dec 19, 2024',
-      location: 'Accra, Ghana',
-      volunteers: 6,
-      maxVolunteers: 8,
-      tasks: { completed: 6, total: 15 },
-      teamMembers: ['DO', 'EA'],
-    },
-    {
-      id: 4,
-      name: 'Women Empowerment Workshop',
-      description: 'Skills training and entrepreneurship education for women',
-      status: 'completed',
-      progress: 100,
-      startDate: 'Nov 20, 2024',
-      endDate: 'Nov 25, 2024',
-      location: 'Addis Ababa, Ethiopia',
-      volunteers: 5,
-      maxVolunteers: 5,
-      tasks: { completed: 10, total: 10 },
-      teamMembers: ['FA', 'GN', 'SO'],
-    },
-  ];
+
+  // Fetch real projects from MongoDB
+  const { data: projectsData, isLoading, error } = useProjects();
+
+  // Safely extract projects array - API may return array directly or wrapped in object
+  const projectsList: any[] = Array.isArray(projectsData) ? projectsData : (projectsData?.data as any[] || []);
+
+  // Transform backend data to component format
+  const projects = projectsList.map((project: any) => ({
+    id: project._id,
+    name: project.title,
+    description: project.description,
+    status: project.status || 'upcoming',
+    progress: project.status === 'completed' ? 100 : project.status === 'ongoing' || project.status === 'active' ? 50 : 0,
+    startDate: project.start_date ? new Date(project.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD',
+    endDate: project.end_date ? new Date(project.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD',
+    location: project.location || 'Location TBD',
+    volunteers: project.volunteers?.length || 0,
+    maxVolunteers: project.neededVolunteers || 10,
+    tasks: { completed: 0, total: project.requirements?.length || 0 },
+    teamMembers: (project.volunteers || []).slice(0, 4).map((v: any) =>
+      v.firstname && v.lastname ? `${v.firstname[0]}${v.lastname[0]}` : 'V'
+    ),
+  }));
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'ongoing': return 'bg-mobilizer/10 text-mobilizer border-mobilizer/30';
+      case 'ongoing': case 'active': return 'bg-mobilizer/10 text-mobilizer border-mobilizer/30';
       case 'upcoming': return 'bg-blue-500/10 text-blue-500 border-blue-500/30';
       case 'completed': return 'bg-success/10 text-success border-success/30';
       default: return 'bg-muted text-muted-foreground';
@@ -88,7 +54,8 @@ const MobilizerProjects = () => {
 
   const filterProjects = (status: string) => {
     if (status === 'all') return projects;
-    return projects.filter(p => p.status === status);
+    if (status === 'ongoing') return projects.filter((p: any) => p.status === 'ongoing' || p.status === 'active');
+    return projects.filter((p: any) => p.status === status);
   };
 
   const ProjectCard = ({ project }: { project: typeof projects[0] }) => (
@@ -102,7 +69,7 @@ const MobilizerProjects = () => {
                 {project.status}
               </Badge>
             </div>
-            <p className="text-sm text-muted-foreground">{project.description}</p>
+            <p className="text-sm text-muted-foreground line-clamp-2">{project.description}</p>
           </div>
         </div>
 
@@ -138,7 +105,7 @@ const MobilizerProjects = () => {
 
         <div className="flex items-center justify-between">
           <div className="flex -space-x-2">
-            {project.teamMembers.slice(0, 4).map((member, index) => (
+            {project.teamMembers.slice(0, 4).map((member: string, index: number) => (
               <Avatar key={index} className="w-8 h-8 border-2 border-background">
                 <AvatarImage src="/placeholder.svg" />
                 <AvatarFallback className="bg-mobilizer text-mobilizer-foreground text-xs">
@@ -160,10 +127,37 @@ const MobilizerProjects = () => {
     </Card>
   );
 
+  if (isLoading) {
+    return (
+      <>
+        <MobilizerHeader title="Projects" subtitle="Loading projects..." />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-mobilizer" />
+        </div>
+      </>
+    );
+  }
+
+  if (error) {
+    return (
+      <>
+        <MobilizerHeader title="Projects" subtitle="Error loading projects" />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <Card className="max-w-md">
+            <CardContent className="p-6 text-center">
+              <p className="text-destructive mb-4">Failed to load projects. Please try again.</p>
+              <Button onClick={() => window.location.reload()}>Retry</Button>
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <MobilizerHeader title="Projects" subtitle="Projects you're supporting" />
-      
+
       <div className="flex-1 overflow-auto p-6 space-y-6">
         {/* Quick Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -175,19 +169,19 @@ const MobilizerProjects = () => {
           </Card>
           <Card>
             <CardContent className="p-4 text-center">
-              <p className="text-2xl font-bold text-mobilizer">{projects.filter(p => p.status === 'ongoing').length}</p>
+              <p className="text-2xl font-bold text-mobilizer">{filterProjects('ongoing').length}</p>
               <p className="text-sm text-muted-foreground">Ongoing</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4 text-center">
-              <p className="text-2xl font-bold text-blue-500">{projects.filter(p => p.status === 'upcoming').length}</p>
+              <p className="text-2xl font-bold text-blue-500">{filterProjects('upcoming').length}</p>
               <p className="text-sm text-muted-foreground">Upcoming</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4 text-center">
-              <p className="text-2xl font-bold text-success">{projects.filter(p => p.status === 'completed').length}</p>
+              <p className="text-2xl font-bold text-success">{filterProjects('completed').length}</p>
               <p className="text-sm text-muted-foreground">Completed</p>
             </CardContent>
           </Card>
@@ -204,33 +198,57 @@ const MobilizerProjects = () => {
 
           <TabsContent value="all" className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
-              {filterProjects('all').map(project => (
-                <ProjectCard key={project.id} project={project} />
-              ))}
+              {filterProjects('all').length > 0 ? (
+                filterProjects('all').map((project: any) => (
+                  <ProjectCard key={project.id} project={project} />
+                ))
+              ) : (
+                <div className="col-span-2 text-center py-12">
+                  <p className="text-muted-foreground">No projects found.</p>
+                </div>
+              )}
             </div>
           </TabsContent>
 
           <TabsContent value="ongoing" className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
-              {filterProjects('ongoing').map(project => (
-                <ProjectCard key={project.id} project={project} />
-              ))}
+              {filterProjects('ongoing').length > 0 ? (
+                filterProjects('ongoing').map((project: any) => (
+                  <ProjectCard key={project.id} project={project} />
+                ))
+              ) : (
+                <div className="col-span-2 text-center py-12">
+                  <p className="text-muted-foreground">No ongoing projects.</p>
+                </div>
+              )}
             </div>
           </TabsContent>
 
           <TabsContent value="upcoming" className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
-              {filterProjects('upcoming').map(project => (
-                <ProjectCard key={project.id} project={project} />
-              ))}
+              {filterProjects('upcoming').length > 0 ? (
+                filterProjects('upcoming').map((project: any) => (
+                  <ProjectCard key={project.id} project={project} />
+                ))
+              ) : (
+                <div className="col-span-2 text-center py-12">
+                  <p className="text-muted-foreground">No upcoming projects.</p>
+                </div>
+              )}
             </div>
           </TabsContent>
 
           <TabsContent value="completed" className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
-              {filterProjects('completed').map(project => (
-                <ProjectCard key={project.id} project={project} />
-              ))}
+              {filterProjects('completed').length > 0 ? (
+                filterProjects('completed').map((project: any) => (
+                  <ProjectCard key={project.id} project={project} />
+                ))
+              ) : (
+                <div className="col-span-2 text-center py-12">
+                  <p className="text-muted-foreground">No completed projects.</p>
+                </div>
+              )}
             </div>
           </TabsContent>
         </Tabs>

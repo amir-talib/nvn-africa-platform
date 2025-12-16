@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Filter, Check, X, Eye, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Search, Filter, Check, X, Eye, Clock, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -20,69 +20,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-
-const requests = [
-  {
-    id: 1,
-    volunteer: {
-      name: 'Fatima Diallo',
-      avatar: 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=100',
-      email: 'fatima@email.com',
-      phone: '+234 801 234 5678',
-      location: 'Lagos, Nigeria',
-    },
-    project: 'Youth Education Initiative',
-    date: '2024-02-28',
-    status: 'pending',
-    skills: ['Teaching', 'French', 'Communication'],
-    message: 'I am passionate about education and would love to contribute to this initiative. I have 5 years of experience teaching in community schools.',
-  },
-  {
-    id: 2,
-    volunteer: {
-      name: 'Kwame Asante',
-      avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100',
-      email: 'kwame@email.com',
-      phone: '+233 24 123 4567',
-      location: 'Accra, Ghana',
-    },
-    project: 'Environmental Cleanup',
-    date: '2024-02-27',
-    status: 'pending',
-    skills: ['Logistics', 'Leadership', 'Event Planning'],
-    message: 'As an environmental advocate, I want to be part of the solution. I can help coordinate teams and manage logistics for cleanup events.',
-  },
-  {
-    id: 3,
-    volunteer: {
-      name: 'Aisha Mohammed',
-      avatar: 'https://images.unsplash.com/photo-1489424731084-a5d8b219a5bb?w=100',
-      email: 'aisha@email.com',
-      phone: '+254 712 345 678',
-      location: 'Nairobi, Kenya',
-    },
-    project: 'Tech Skills Workshop',
-    date: '2024-02-26',
-    status: 'approved',
-    skills: ['Programming', 'Mentoring', 'Data Analysis'],
-    message: 'I am a software developer and would like to share my knowledge with young adults looking to enter the tech industry.',
-  },
-  {
-    id: 4,
-    volunteer: {
-      name: 'Emmanuel Obi',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100',
-      email: 'emmanuel@email.com',
-      phone: '+234 803 456 7890',
-      location: 'Abuja, Nigeria',
-    },
-    project: 'Community Health Outreach',
-    date: '2024-02-25',
-    status: 'rejected',
-    skills: ['Healthcare', 'First Aid'],
-    message: 'I am a healthcare professional interested in volunteering for the health outreach program.',
-  },
-];
+import { toast } from 'sonner';
+import { useProjectRequests, useApproveRequest, useRejectRequest, type ProjectRequest } from '@/hooks/useProjects';
 
 const statusColors: Record<string, string> = {
   pending: 'bg-warning/10 text-warning border-warning/20',
@@ -98,18 +37,63 @@ const statusIcons: Record<string, React.ElementType> = {
 
 export default function Requests() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [projectFilter, setProjectFilter] = useState('all');
-  const [selectedRequest, setSelectedRequest] = useState<typeof requests[0] | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<ProjectRequest | null>(null);
   const [activeTab, setActiveTab] = useState('pending');
 
+  // Fetch requests from API
+  const { data: requests = [], isLoading, error } = useProjectRequests();
+  const approveRequestMutation = useApproveRequest();
+  const rejectRequestMutation = useRejectRequest();
+
+  // Filter requests based on search and tab
   const filteredRequests = requests.filter((r) => {
-    const matchesSearch = r.volunteer.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesProject = projectFilter === 'all' || r.project === projectFilter;
+    const volunteerName = `${r.volunteer?.firstname || ''} ${r.volunteer?.lastname || ''}`.toLowerCase();
+    const matchesSearch = volunteerName.includes(searchQuery.toLowerCase());
     const matchesStatus = r.status === activeTab;
-    return matchesSearch && matchesProject && matchesStatus;
+    return matchesSearch && matchesStatus;
   });
 
   const getStatusCount = (status: string) => requests.filter(r => r.status === status).length;
+
+  const handleApprove = async (requestId: string) => {
+    try {
+      await approveRequestMutation.mutateAsync(requestId);
+      toast.success('Request approved successfully');
+      setSelectedRequest(null);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to approve request');
+    }
+  };
+
+  const handleReject = async (requestId: string) => {
+    try {
+      await rejectRequestMutation.mutateAsync(requestId);
+      toast.success('Request rejected');
+      setSelectedRequest(null);
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to reject request');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout title="Volunteer Requests">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout title="Volunteer Requests">
+        <div className="flex items-center justify-center h-64 text-destructive">
+          Failed to load requests. Please try again.
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="Volunteer Requests">
@@ -143,19 +127,6 @@ export default function Requests() {
             className="pl-9"
           />
         </div>
-        <Select value={projectFilter} onValueChange={setProjectFilter}>
-          <SelectTrigger className="w-full sm:w-56">
-            <Filter className="w-4 h-4 mr-2" />
-            <SelectValue placeholder="Filter by project" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Projects</SelectItem>
-            <SelectItem value="Youth Education Initiative">Youth Education Initiative</SelectItem>
-            <SelectItem value="Environmental Cleanup">Environmental Cleanup</SelectItem>
-            <SelectItem value="Tech Skills Workshop">Tech Skills Workshop</SelectItem>
-            <SelectItem value="Community Health Outreach">Community Health Outreach</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       {/* Tabs */}
@@ -185,36 +156,37 @@ export default function Requests() {
             ) : (
               filteredRequests.map((request) => {
                 const StatusIcon = statusIcons[request.status];
+                const volunteerName = `${request.volunteer?.firstname || ''} ${request.volunteer?.lastname || ''}`;
                 return (
                   <div
-                    key={request.id}
+                    key={request._id}
                     className="rounded-xl bg-card card-shadow p-6 hover:card-shadow-hover transition-shadow"
                   >
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                       <div className="flex items-start gap-4">
                         <Avatar className="w-12 h-12">
-                          <AvatarImage src={request.volunteer.avatar} />
+                          <AvatarImage src={request.volunteer?.profile_picture} />
                           <AvatarFallback>
-                            {request.volunteer.name.split(' ').map(n => n[0]).join('')}
+                            {request.volunteer?.firstname?.[0]}{request.volunteer?.lastname?.[0]}
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-semibold text-foreground">{request.volunteer.name}</h3>
+                            <h3 className="font-semibold text-foreground">{volunteerName}</h3>
                             <Badge variant="outline" className={statusColors[request.status]}>
                               <StatusIcon className="w-3 h-3 mr-1" />
                               {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
                             </Badge>
                           </div>
-                          <p className="text-sm text-muted-foreground mb-2">{request.volunteer.email}</p>
+                          <p className="text-sm text-muted-foreground mb-2">{request.volunteer?.email}</p>
                           <div className="flex items-center gap-4 text-sm">
-                            <span className="text-primary font-medium">{request.project}</span>
+                            <span className="text-primary font-medium">{request.project?.title || 'Unknown Project'}</span>
                             <span className="text-muted-foreground">
-                              {new Date(request.date).toLocaleDateString()}
+                              {new Date(request.createdAt).toLocaleDateString()}
                             </span>
                           </div>
                           <div className="flex gap-1 mt-2 flex-wrap">
-                            {request.skills.map((skill) => (
+                            {(request.volunteer?.skills || []).slice(0, 3).map((skill) => (
                               <Badge key={skill} variant="secondary" className="bg-muted text-muted-foreground text-xs">
                                 {skill}
                               </Badge>
@@ -237,6 +209,8 @@ export default function Requests() {
                             <Button
                               size="sm"
                               className="bg-success hover:bg-success/90 text-success-foreground"
+                              onClick={() => handleApprove(request._id)}
+                              disabled={approveRequestMutation.isPending}
                             >
                               <Check className="w-4 h-4 mr-2" />
                               Approve
@@ -244,6 +218,8 @@ export default function Requests() {
                             <Button
                               size="sm"
                               variant="destructive"
+                              onClick={() => handleReject(request._id)}
+                              disabled={rejectRequestMutation.isPending}
                             >
                               <X className="w-4 h-4 mr-2" />
                               Reject
@@ -271,14 +247,16 @@ export default function Requests() {
             <div className="space-y-6">
               <div className="flex items-center gap-4">
                 <Avatar className="w-16 h-16">
-                  <AvatarImage src={selectedRequest.volunteer.avatar} />
+                  <AvatarImage src={selectedRequest.volunteer?.profile_picture} />
                   <AvatarFallback>
-                    {selectedRequest.volunteer.name.split(' ').map(n => n[0]).join('')}
+                    {selectedRequest.volunteer?.firstname?.[0]}{selectedRequest.volunteer?.lastname?.[0]}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <h3 className="text-xl font-semibold text-foreground">{selectedRequest.volunteer.name}</h3>
-                  <p className="text-muted-foreground">{selectedRequest.volunteer.location}</p>
+                  <h3 className="text-xl font-semibold text-foreground">
+                    {selectedRequest.volunteer?.firstname} {selectedRequest.volunteer?.lastname}
+                  </h3>
+                  <p className="text-muted-foreground">{selectedRequest.volunteer?.address}</p>
                 </div>
               </div>
 
@@ -287,19 +265,19 @@ export default function Requests() {
               <div className="space-y-3">
                 <div>
                   <p className="text-sm text-muted-foreground">Project</p>
-                  <p className="font-medium text-primary">{selectedRequest.project}</p>
+                  <p className="font-medium text-primary">{selectedRequest.project?.title}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Request Date</p>
-                  <p className="font-medium">{new Date(selectedRequest.date).toLocaleDateString()}</p>
+                  <p className="font-medium">{new Date(selectedRequest.createdAt).toLocaleDateString()}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Email</p>
-                  <p className="font-medium">{selectedRequest.volunteer.email}</p>
+                  <p className="font-medium">{selectedRequest.volunteer?.email}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Phone</p>
-                  <p className="font-medium">{selectedRequest.volunteer.phone}</p>
+                  <p className="font-medium">{selectedRequest.volunteer?.phone || 'Not provided'}</p>
                 </div>
               </div>
 
@@ -308,24 +286,23 @@ export default function Requests() {
               <div>
                 <p className="text-sm text-muted-foreground mb-2">Skills</p>
                 <div className="flex gap-2 flex-wrap">
-                  {selectedRequest.skills.map((skill) => (
+                  {(selectedRequest.volunteer?.skills || []).map((skill) => (
                     <Badge key={skill} variant="secondary" className="bg-primary/10 text-primary">
                       {skill}
                     </Badge>
                   ))}
+                  {(!selectedRequest.volunteer?.skills || selectedRequest.volunteer.skills.length === 0) && (
+                    <span className="text-muted-foreground text-sm">No skills listed</span>
+                  )}
                 </div>
-              </div>
-
-              <div>
-                <p className="text-sm text-muted-foreground mb-2">Message</p>
-                <p className="text-foreground bg-muted/50 p-4 rounded-lg">{selectedRequest.message}</p>
               </div>
 
               {selectedRequest.status === 'pending' && (
                 <div className="flex gap-3">
                   <Button
                     className="flex-1 bg-success hover:bg-success/90 text-success-foreground"
-                    onClick={() => setSelectedRequest(null)}
+                    onClick={() => handleApprove(selectedRequest._id)}
+                    disabled={approveRequestMutation.isPending}
                   >
                     <Check className="w-4 h-4 mr-2" />
                     Approve
@@ -333,7 +310,8 @@ export default function Requests() {
                   <Button
                     variant="destructive"
                     className="flex-1"
-                    onClick={() => setSelectedRequest(null)}
+                    onClick={() => handleReject(selectedRequest._id)}
+                    disabled={rejectRequestMutation.isPending}
                   >
                     <X className="w-4 h-4 mr-2" />
                     Reject

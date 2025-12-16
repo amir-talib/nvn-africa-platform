@@ -1,156 +1,114 @@
 import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Bell, 
-  CheckCircle, 
-  Clock, 
-  UserPlus, 
-  Calendar, 
+import {
+  Bell,
+  CheckCircle,
+  Clock,
+  UserPlus,
+  Calendar,
   AlertCircle,
   Mail,
   Trash2,
-  CheckCheck
+  CheckCheck,
+  Loader2,
+  Award,
+  ClipboardCheck
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
-interface Notification {
-  id: number;
-  type: 'request' | 'project' | 'volunteer' | 'system' | 'message';
-  title: string;
-  description: string;
-  time: string;
-  read: boolean;
-  link?: string;
-}
-
-const mockNotifications: Notification[] = [
-  {
-    id: 1,
-    type: 'request',
-    title: 'New volunteer request',
-    description: 'Amara Okonkwo has requested to join the Community Health Outreach project.',
-    time: '5 minutes ago',
-    read: false,
-    link: '/requests'
-  },
-  {
-    id: 2,
-    type: 'project',
-    title: 'Project deadline approaching',
-    description: 'Youth Education Initiative project deadline is in 3 days.',
-    time: '1 hour ago',
-    read: false,
-    link: '/projects/1'
-  },
-  {
-    id: 3,
-    type: 'volunteer',
-    title: 'Volunteer milestone achieved',
-    description: 'Kwame Asante has contributed 100+ hours to projects.',
-    time: '2 hours ago',
-    read: false,
-    link: '/volunteers/1'
-  },
-  {
-    id: 4,
-    type: 'system',
-    title: 'System maintenance scheduled',
-    description: 'The platform will undergo maintenance on Saturday from 2-4 AM.',
-    time: '5 hours ago',
-    read: true
-  },
-  {
-    id: 5,
-    type: 'message',
-    title: 'New message received',
-    description: 'You have a new message from Fatima Diallo regarding the Clean Water Initiative.',
-    time: '1 day ago',
-    read: true,
-    link: '/volunteers/2'
-  },
-  {
-    id: 6,
-    type: 'request',
-    title: 'Request approved',
-    description: 'Your request to add new team members has been approved.',
-    time: '2 days ago',
-    read: true
-  },
-  {
-    id: 7,
-    type: 'project',
-    title: 'Project completed',
-    description: 'Agricultural Training Program has been marked as completed.',
-    time: '3 days ago',
-    read: true,
-    link: '/projects/3'
-  },
-  {
-    id: 8,
-    type: 'volunteer',
-    title: 'New volunteer joined',
-    description: 'Chinua Achebe has joined the platform as a new volunteer.',
-    time: '1 week ago',
-    read: true,
-    link: '/volunteers/5'
-  }
-];
+import { toast } from 'sonner';
+import { useNotifications, useMarkAsRead, useMarkAllAsRead, useDeleteNotification } from '@/hooks/useNotifications';
 
 const getNotificationIcon = (type: string) => {
   switch (type) {
-    case 'request':
+    case 'hours_logged':
+      return <Clock className="w-5 h-5 text-primary" />;
+    case 'hours_verified':
+      return <CheckCircle className="w-5 h-5 text-success" />;
+    case 'hours_rejected':
+      return <AlertCircle className="w-5 h-5 text-destructive" />;
+    case 'rank_up':
+      return <Award className="w-5 h-5 text-warning" />;
+    case 'project_request':
       return <UserPlus className="w-5 h-5 text-primary" />;
-    case 'project':
-      return <Calendar className="w-5 h-5 text-green-500" />;
-    case 'volunteer':
-      return <CheckCircle className="w-5 h-5 text-blue-500" />;
-    case 'system':
-      return <AlertCircle className="w-5 h-5 text-amber-500" />;
+    case 'project_approved':
+      return <ClipboardCheck className="w-5 h-5 text-success" />;
+    case 'project_completed':
+      return <Calendar className="w-5 h-5 text-success" />;
     case 'message':
       return <Mail className="w-5 h-5 text-purple-500" />;
+    case 'system':
+      return <AlertCircle className="w-5 h-5 text-amber-500" />;
     default:
       return <Bell className="w-5 h-5 text-muted-foreground" />;
   }
 };
 
+const formatTime = (dateString: string) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return 'Just now';
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`;
+  return date.toLocaleDateString();
+};
+
 export default function Notifications() {
   const navigate = useNavigate();
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  // Fetch notifications from API
+  const { data: notifications = [], isLoading, error } = useNotifications();
+  const markAsReadMutation = useMarkAsRead();
+  const markAllAsReadMutation = useMarkAllAsRead();
+  const deleteNotificationMutation = useDeleteNotification();
+
+  const unreadCount = notifications.filter((n: any) => !n.is_read).length;
   const allNotifications = notifications;
-  const unreadNotifications = notifications.filter(n => !n.read);
+  const unreadNotifications = notifications.filter((n: any) => !n.is_read);
 
-  const markAsRead = (id: number) => {
-    setNotifications(prev => 
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    );
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      await markAsReadMutation.mutateAsync(id);
+    } catch (error: any) {
+      toast.error('Failed to mark as read');
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+  const handleMarkAllAsRead = async () => {
+    try {
+      await markAllAsReadMutation.mutateAsync();
+      toast.success('All notifications marked as read');
+    } catch (error: any) {
+      toast.error('Failed to mark all as read');
+    }
   };
 
-  const deleteNotification = (id: number) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
+  const handleDeleteNotification = async (id: string) => {
+    try {
+      await deleteNotificationMutation.mutateAsync(id);
+      toast.success('Notification deleted');
+    } catch (error: any) {
+      toast.error('Failed to delete notification');
+    }
   };
 
-  const handleNotificationClick = (notification: Notification) => {
-    markAsRead(notification.id);
+  const handleNotificationClick = (notification: any) => {
+    handleMarkAsRead(notification._id);
     if (notification.link) {
       navigate(notification.link);
     }
   };
 
-  const NotificationItem = ({ notification }: { notification: Notification }) => (
+  const NotificationItem = ({ notification }: { notification: any }) => (
     <div
-      className={`flex items-start gap-4 p-4 border-b border-border last:border-0 hover:bg-muted/50 transition-colors cursor-pointer ${
-        !notification.read ? 'bg-primary/5' : ''
-      }`}
+      className={`flex items-start gap-4 p-4 border-b border-border last:border-0 hover:bg-muted/50 transition-colors cursor-pointer ${!notification.is_read ? 'bg-primary/5' : ''
+        }`}
       onClick={() => handleNotificationClick(notification)}
     >
       <div className="flex-shrink-0 mt-1">
@@ -159,14 +117,14 @@ export default function Notifications() {
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className={`font-medium ${!notification.read ? 'text-foreground' : 'text-muted-foreground'}`}>
+            <p className={`font-medium ${!notification.is_read ? 'text-foreground' : 'text-muted-foreground'}`}>
               {notification.title}
             </p>
             <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-              {notification.description}
+              {notification.message}
             </p>
           </div>
-          {!notification.read && (
+          {!notification.is_read && (
             <Badge variant="secondary" className="bg-primary/10 text-primary text-xs">
               New
             </Badge>
@@ -174,18 +132,18 @@ export default function Notifications() {
         </div>
         <div className="flex items-center gap-2 mt-2">
           <Clock className="w-3 h-3 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">{notification.time}</span>
+          <span className="text-xs text-muted-foreground">{formatTime(notification.createdAt)}</span>
         </div>
       </div>
       <div className="flex items-center gap-1">
-        {!notification.read && (
+        {!notification.is_read && (
           <Button
             variant="ghost"
             size="icon"
             className="h-8 w-8"
             onClick={(e) => {
               e.stopPropagation();
-              markAsRead(notification.id);
+              handleMarkAsRead(notification._id);
             }}
           >
             <CheckCheck className="w-4 h-4" />
@@ -197,14 +155,43 @@ export default function Notifications() {
           className="h-8 w-8 text-muted-foreground hover:text-destructive"
           onClick={(e) => {
             e.stopPropagation();
-            deleteNotification(notification.id);
+            handleDeleteNotification(notification._id);
           }}
+          disabled={deleteNotificationMutation.isPending}
         >
           <Trash2 className="w-4 h-4" />
         </Button>
       </div>
     </div>
   );
+
+  if (isLoading) {
+    return (
+      <DashboardLayout title="Notifications">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout title="Notifications">
+        <div className="flex items-center justify-center h-64 text-destructive">
+          Failed to load notifications. Please try again.
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  // Count by type
+  const requestCount = notifications.filter((n: any) =>
+    n.type === 'project_request' || n.type === 'project_approved'
+  ).length;
+  const hoursCount = notifications.filter((n: any) =>
+    n.type === 'hours_logged' || n.type === 'hours_verified' || n.type === 'hours_rejected'
+  ).length;
 
   return (
     <DashboardLayout title="Notifications">
@@ -218,7 +205,11 @@ export default function Notifications() {
             </p>
           </div>
           {unreadCount > 0 && (
-            <Button variant="outline" onClick={markAllAsRead}>
+            <Button
+              variant="outline"
+              onClick={handleMarkAllAsRead}
+              disabled={markAllAsReadMutation.isPending}
+            >
               <CheckCheck className="w-4 h-4 mr-2" />
               Mark all as read
             </Button>
@@ -260,9 +251,7 @@ export default function Notifications() {
                   <UserPlus className="w-5 h-5 text-green-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">
-                    {notifications.filter(n => n.type === 'request').length}
-                  </p>
+                  <p className="text-2xl font-bold">{requestCount}</p>
                   <p className="text-xs text-muted-foreground">Requests</p>
                 </div>
               </div>
@@ -272,13 +261,11 @@ export default function Notifications() {
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-purple-500/10 rounded-lg">
-                  <Mail className="w-5 h-5 text-purple-500" />
+                  <Clock className="w-5 h-5 text-purple-500" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">
-                    {notifications.filter(n => n.type === 'message').length}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Messages</p>
+                  <p className="text-2xl font-bold">{hoursCount}</p>
+                  <p className="text-xs text-muted-foreground">Hours</p>
                 </div>
               </div>
             </CardContent>
@@ -300,8 +287,8 @@ export default function Notifications() {
               <TabsContent value="all" className="mt-4">
                 {allNotifications.length > 0 ? (
                   <div className="divide-y divide-border">
-                    {allNotifications.map(notification => (
-                      <NotificationItem key={notification.id} notification={notification} />
+                    {allNotifications.map((notification: any) => (
+                      <NotificationItem key={notification._id} notification={notification} />
                     ))}
                   </div>
                 ) : (
@@ -314,8 +301,8 @@ export default function Notifications() {
               <TabsContent value="unread" className="mt-4">
                 {unreadNotifications.length > 0 ? (
                   <div className="divide-y divide-border">
-                    {unreadNotifications.map(notification => (
-                      <NotificationItem key={notification.id} notification={notification} />
+                    {unreadNotifications.map((notification: any) => (
+                      <NotificationItem key={notification._id} notification={notification} />
                     ))}
                   </div>
                 ) : (

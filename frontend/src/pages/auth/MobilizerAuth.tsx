@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Users, ArrowLeft } from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
-import axios from "axios";
+import { api } from "@/lib/api";
 
 const MobilizerAuth = () => {
   const navigate = useNavigate();
@@ -23,30 +23,44 @@ const MobilizerAuth = () => {
     setErrors({});
     setIsLoading(true);
     try {
-      // Build payload from signupData
+      // Validate inputs
+      if (!loginData.email || !loginData.password) {
+        const errorMsg = "Please enter both email and password";
+        setErrors({ general: errorMsg });
+        toast.error(errorMsg);
+        setIsLoading(false);
+        return;
+      }
+
       const payload = {
         email: loginData.email,
         password: loginData.password,
       };
 
-      const response = await axios.post("http://localhost:3000/api/auth/login", payload);
+      const response = await api.post(`/auth/login`, payload);
       console.debug("Login response:", response);
 
       if (response.data?.success) {
+        toast.success("Login successful!");
         login(response.data.user, response.data.token);
         console.log(response.data.user.role)
         if (response.data.user.role === "admin") {
           navigate("/dashboard")
+        } else if (response.data.user.role === "mobilizer") {
+          navigate("/mobilizer")
         } else {
           navigate("/volunteer")
         }
 
       } else {
-        setErrors({ general: response.data?.message || "Login failed" });
-
+        const errorMsg = response.data?.message || "Login failed";
+        setErrors({ general: errorMsg });
+        toast.error(errorMsg);
       }
     } catch (error: any) {
-      setErrors({ general: error?.response?.data?.message || "An error occurred during login" });
+      const errorMsg = error?.response?.data?.message || "An error occurred during login";
+      setErrors({ general: errorMsg });
+      toast.error(errorMsg);
       console.error("Login error response:", error?.response ?? error);
     } finally {
       setIsLoading(false);
@@ -77,7 +91,6 @@ const MobilizerAuth = () => {
             <CardDescription>NAMYO Africa Mobilizer Access</CardDescription>
           </CardHeader>
           <CardContent>
-
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="login-email">Email</Label>
@@ -106,6 +119,9 @@ const MobilizerAuth = () => {
               <Button type="submit" className="w-full bg-blue-500 hover:bg-mobilizer-secondary" disabled={isLoading}>
                 {isLoading ? "Signing in..." : "Sign In"}
               </Button>
+              {errors.general && (
+                <p className="text-destructive text-sm text-center">{errors.general}</p>
+              )}
             </form>
           </CardContent>
         </Card>

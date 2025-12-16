@@ -22,7 +22,7 @@ const projectSchema = new mongoose.Schema({
 
     status: {
         type: String,
-        enum: ["upcoming", "ongoing", "completed"],
+        enum: ["upcoming", "ongoing", "completed", "cancelled"],
         default: "upcoming"
     },
     start_date: {
@@ -35,10 +35,32 @@ const projectSchema = new mongoose.Schema({
         required: false
     },
 
+    // NEW PRD FIELD - Location
+    location: {
+        type: String,
+        default: ""
+    },
+
+    // NEW PRD FIELD - Project Images (Cloudinary URLs)
+    images: {
+        type: [String],
+        default: []
+    },
+
     requirements: [String],
     neededVolunteers: Number,
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     volunteers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+
+    // NEW PRD FIELD - Track who last edited
+    edited_by: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+    },
+
+    edited_at: {
+        type: Date
+    }
 
 }, { timestamps: true })
 

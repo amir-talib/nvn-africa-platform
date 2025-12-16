@@ -1,70 +1,51 @@
-import { useState } from 'react';
 import MobilizerHeader from '@/components/layout/MobilizerHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Bell, 
-  Info, 
-  AlertTriangle, 
+import {
+  Bell,
+  Info,
+  AlertTriangle,
   CheckCircle,
   Clock,
   Trash2,
-  Check
+  Check,
+  Loader2
 } from 'lucide-react';
+import { useNotifications, useMarkAsRead, useMarkAllAsRead, useDeleteNotification } from '@/hooks/useNotifications';
 
 const MobilizerUpdates = () => {
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      title: 'New Safety Guidelines Released',
-      description: 'Please review the updated safety protocols for all field activities.',
-      time: '2 hours ago',
-      type: 'important',
-      read: false,
-    },
-    {
-      id: 2,
-      title: 'Volunteer Application Received',
-      description: 'Amina Diallo has requested to join Community Health Camp.',
-      time: '3 hours ago',
-      type: 'info',
-      read: false,
-    },
-    {
-      id: 3,
-      title: 'Project Report Due',
-      description: 'Monthly progress report for Environmental Clean-up is due in 2 days.',
-      time: '5 hours ago',
-      type: 'warning',
-      read: false,
-    },
-    {
-      id: 4,
-      title: 'Task Completed',
-      description: 'Sarah Okonkwo completed the volunteer registration task.',
-      time: '1 day ago',
-      type: 'success',
-      read: true,
-    },
-    {
-      id: 5,
-      title: 'Team Meeting Scheduled',
-      description: 'Weekly team meeting scheduled for Friday at 9 AM.',
-      time: '1 day ago',
-      type: 'info',
-      read: true,
-    },
-    {
-      id: 6,
-      title: 'Budget Approval',
-      description: 'Your budget request for Youth Education Drive has been approved.',
-      time: '2 days ago',
-      type: 'success',
-      read: true,
-    },
-  ]);
+  // Fetch real notifications from MongoDB
+  const { data: notificationsData, isLoading } = useNotifications(undefined, 50);
+  const markAsRead = useMarkAsRead();
+  const markAllAsRead = useMarkAllAsRead();
+  const deleteNotification = useDeleteNotification();
+
+  // Helper to format time ago
+  function formatTimeAgo(dateString: string) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffHours < 1) return 'Just now';
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    return `${Math.floor(diffDays / 7)} week${Math.floor(diffDays / 7) > 1 ? 's' : ''} ago`;
+  }
+
+  // Transform backend notifications
+  const notifications = (notificationsData?.data || []).map((n: any) => ({
+    id: n._id,
+    title: n.title || 'Notification',
+    description: n.message || '',
+    time: n.createdAt ? formatTimeAgo(n.createdAt) : 'Recently',
+    type: n.type || 'info',
+    read: n.read || false,
+  }));
+
 
   const teamMessages = [
     {
@@ -105,26 +86,36 @@ const MobilizerUpdates = () => {
     }
   };
 
-  const markAsRead = (id: number) => {
-    setNotifications(notifications.map(n => 
-      n.id === id ? { ...n, read: true } : n
-    ));
+  const handleMarkAsRead = (id: string) => {
+    markAsRead.mutate(id);
   };
 
-  const markAllAsRead = () => {
-    setNotifications(notifications.map(n => ({ ...n, read: true })));
+  const handleMarkAllAsRead = () => {
+    markAllAsRead.mutate();
   };
 
-  const deleteNotification = (id: number) => {
-    setNotifications(notifications.filter(n => n.id !== id));
+  const handleDeleteNotification = (id: string) => {
+    deleteNotification.mutate(id);
   };
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter((n: any) => !n.read).length;
+
+  if (isLoading) {
+    return (
+      <>
+        <MobilizerHeader title="Updates" subtitle="Loading..." />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-mobilizer" />
+        </div>
+      </>
+    );
+  }
 
   return (
+
     <>
       <MobilizerHeader title="Updates" subtitle="Announcements and notifications" />
-      
+
       <div className="flex-1 overflow-auto p-6 space-y-6">
         <Tabs defaultValue="notifications" className="space-y-4">
           <TabsList>
@@ -146,7 +137,7 @@ const MobilizerUpdates = () => {
                 {unreadCount} unread notifications
               </p>
               {unreadCount > 0 && (
-                <Button variant="ghost" size="sm" className="text-mobilizer" onClick={markAllAsRead}>
+                <Button variant="ghost" size="sm" className="text-mobilizer" onClick={handleMarkAllAsRead}>
                   <Check className="w-4 h-4 mr-1" /> Mark all as read
                 </Button>
               )}
@@ -154,8 +145,8 @@ const MobilizerUpdates = () => {
 
             <div className="space-y-3">
               {notifications.map((notification) => (
-                <Card 
-                  key={notification.id} 
+                <Card
+                  key={notification.id}
                   className={`transition-all ${!notification.read ? 'border-l-4 border-l-mobilizer bg-mobilizer-accent/30' : ''}`}
                 >
                   <CardContent className="p-4">
@@ -175,23 +166,24 @@ const MobilizerUpdates = () => {
                       </div>
                       <div className="flex items-center gap-1">
                         {!notification.read && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             className="h-8 w-8 text-mobilizer hover:bg-mobilizer-accent"
-                            onClick={() => markAsRead(notification.id)}
+                            onClick={() => handleMarkAsRead(notification.id)}
                           >
                             <Check className="w-4 h-4" />
                           </Button>
                         )}
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => deleteNotification(notification.id)}
+                          onClick={() => handleDeleteNotification(notification.id)}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
+
                       </div>
                     </div>
                   </CardContent>
@@ -216,8 +208,8 @@ const MobilizerUpdates = () => {
                   </div>
                   <h4 className="font-semibold text-foreground mb-1">New Safety Guidelines Released</h4>
                   <p className="text-sm text-muted-foreground">
-                    All mobilizers and volunteers must review and acknowledge the updated safety protocols 
-                    before participating in any field activities. The new guidelines include updated 
+                    All mobilizers and volunteers must review and acknowledge the updated safety protocols
+                    before participating in any field activities. The new guidelines include updated
                     emergency procedures and health screening requirements.
                   </p>
                 </div>
@@ -229,7 +221,7 @@ const MobilizerUpdates = () => {
                   </div>
                   <h4 className="font-semibold text-foreground mb-1">Monthly Report Deadline Extended</h4>
                   <p className="text-sm text-muted-foreground">
-                    The deadline for December monthly reports has been extended to December 25th. 
+                    The deadline for December monthly reports has been extended to December 25th.
                     Please ensure all project updates and volunteer hours are accurately recorded.
                   </p>
                 </div>
@@ -241,7 +233,7 @@ const MobilizerUpdates = () => {
                   </div>
                   <h4 className="font-semibold text-foreground mb-1">Training Session Next Week</h4>
                   <p className="text-sm text-muted-foreground">
-                    Mandatory training session for all mobilizers scheduled for December 12th. 
+                    Mandatory training session for all mobilizers scheduled for December 12th.
                     Topics include volunteer management best practices and new reporting tools.
                   </p>
                 </div>

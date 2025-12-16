@@ -4,64 +4,34 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
-import { 
-  ChevronLeft, 
+import {
+  ChevronLeft,
   ChevronRight,
   Clock,
   MapPin,
-  Users
+  Users,
+  Loader2
 } from 'lucide-react';
+import { useProjects } from '@/hooks/useProjects';
 
 const MobilizerCalendar = () => {
   const [date, setDate] = useState<Date | undefined>(new Date());
 
-  const events = [
-    {
-      id: 1,
-      title: 'Community Health Camp',
-      date: 'Dec 15, 2024',
-      time: '8:00 AM - 5:00 PM',
-      location: 'Nairobi Community Center',
-      type: 'project',
-      volunteers: 8,
-    },
-    {
-      id: 2,
-      title: 'Team Briefing',
-      date: 'Dec 16, 2024',
-      time: '9:00 AM - 10:00 AM',
-      location: 'Virtual Meeting',
-      type: 'meeting',
-      volunteers: 5,
-    },
-    {
-      id: 3,
-      title: 'Environmental Clean-up',
-      date: 'Dec 18, 2024',
-      time: '7:00 AM - 2:00 PM',
-      location: 'Accra Beach',
-      type: 'project',
-      volunteers: 6,
-    },
-    {
-      id: 4,
-      title: 'Volunteer Training Session',
-      date: 'Dec 20, 2024',
-      time: '2:00 PM - 4:00 PM',
-      location: 'Training Room A',
-      type: 'training',
-      volunteers: 12,
-    },
-    {
-      id: 5,
-      title: 'Youth Education Drive',
-      date: 'Dec 25, 2024',
-      time: '9:00 AM - 3:00 PM',
-      location: 'Lagos Community School',
-      type: 'project',
-      volunteers: 12,
-    },
-  ];
+  // Fetch real projects from MongoDB
+  const { data: projectsData, isLoading } = useProjects();
+
+  // Transform projects into calendar events
+  const projectsList: any[] = Array.isArray(projectsData) ? projectsData : (projectsData?.data as any[] || []);
+
+  const events = projectsList.map((project: any) => ({
+    id: project._id,
+    title: project.title,
+    date: project.start_date ? new Date(project.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBD',
+    time: '9:00 AM - 5:00 PM',
+    location: project.location || 'Location TBD',
+    type: 'project',
+    volunteers: project.volunteers?.length || 0,
+  }));
 
   const getEventColor = (type: string) => {
     switch (type) {
@@ -74,10 +44,22 @@ const MobilizerCalendar = () => {
 
   const upcomingEvents = events.slice(0, 5);
 
+  if (isLoading) {
+    return (
+      <>
+        <MobilizerHeader title="Calendar" subtitle="Loading..." />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-mobilizer" />
+        </div>
+      </>
+    );
+  }
+
+
   return (
     <>
       <MobilizerHeader title="Calendar" subtitle="Upcoming projects and events" />
-      
+
       <div className="flex-1 overflow-auto p-6">
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Calendar */}
@@ -92,7 +74,7 @@ const MobilizerCalendar = () => {
                 onSelect={setDate}
                 className="rounded-md border w-full"
               />
-              
+
               {/* Legend */}
               <div className="mt-4 space-y-2">
                 <p className="text-sm font-medium text-foreground">Event Types</p>
@@ -169,16 +151,15 @@ const MobilizerCalendar = () => {
             <div className="relative">
               {/* Timeline line */}
               <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
-              
+
               <div className="space-y-6">
                 {events.map((event, index) => (
                   <div key={event.id} className="relative flex gap-4 pl-10">
                     {/* Timeline dot */}
-                    <div className={`absolute left-2 w-5 h-5 rounded-full border-4 border-background ${
-                      event.type === 'project' ? 'bg-mobilizer' :
-                      event.type === 'meeting' ? 'bg-blue-500' : 'bg-purple-500'
-                    }`} />
-                    
+                    <div className={`absolute left-2 w-5 h-5 rounded-full border-4 border-background ${event.type === 'project' ? 'bg-mobilizer' :
+                        event.type === 'meeting' ? 'bg-blue-500' : 'bg-purple-500'
+                      }`} />
+
                     <div className="flex-1 pb-6">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-sm font-medium text-muted-foreground">{event.date}</span>

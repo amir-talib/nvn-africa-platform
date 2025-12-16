@@ -81,6 +81,12 @@ const userSchema = new mongoose.Schema({
         required: true
     },
 
+    // NEW - Country for regional analytics
+    country: {
+        type: String,
+        default: ""
+    },
+
     role: {
         type: String,
         enum: ["volunteer", "admin", "mobilizer", "chief_mobilizer", "general_mobilizer", "community_lead"],
@@ -101,6 +107,35 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+
+    // NEW PRD FIELDS - Profile & Verification
+    profile_picture: {
+        type: String,
+        default: ""
+    },
+
+    email_verified: {
+        type: Boolean,
+        default: false
+    },
+
+    phone_verified: {
+        type: Boolean,
+        default: false
+    },
+
+    // NEW PRD FIELDS - Gamification
+    total_hours: {
+        type: Number,
+        default: 0
+    },
+
+    rank: {
+        type: String,
+        enum: ["starter", "active_volunteer", "community_leader", "regional_mobilizer", "impact_ambassador"],
+        default: "starter"
+    },
+
 }, { timestamps: true });
 
 const User = mongoose.model("User", userSchema);

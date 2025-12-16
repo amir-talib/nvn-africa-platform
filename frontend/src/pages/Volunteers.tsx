@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, MoreHorizontal, Eye, Mail, UserX } from 'lucide-react';
+import { Search, Filter, MoreHorizontal, Eye, Mail, UserX, UserCheck, Loader2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -27,86 +27,107 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-
-const volunteers = [
-  {
-    id: 1,
-    name: 'Fatima Diallo',
-    email: 'fatima.diallo@email.com',
-    phone: '+234 801 234 5678',
-    location: 'Lagos, Nigeria',
-    avatar: 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=100',
-    status: 'active' as const,
-    joinDate: '2023-06-15',
-    skills: ['Teaching', 'French', 'Community Outreach'],
-    projects: ['Youth Education Initiative', 'Community Health Outreach'],
-    hoursContributed: 156,
-  },
-  {
-    id: 2,
-    name: 'Kwame Asante',
-    email: 'kwame.asante@email.com',
-    phone: '+233 24 123 4567',
-    location: 'Accra, Ghana',
-    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100',
-    status: 'active' as const,
-    joinDate: '2023-08-22',
-    skills: ['Logistics', 'Leadership', 'Event Planning'],
-    projects: ['Environmental Cleanup'],
-    hoursContributed: 89,
-  },
-  {
-    id: 3,
-    name: 'Aisha Mohammed',
-    email: 'aisha.m@email.com',
-    phone: '+254 712 345 678',
-    location: 'Nairobi, Kenya',
-    avatar: 'https://images.unsplash.com/photo-1489424731084-a5d8b219a5bb?w=100',
-    status: 'inactive' as const,
-    joinDate: '2023-03-10',
-    skills: ['Programming', 'Mentoring', 'Data Analysis'],
-    projects: ['Tech Skills Workshop'],
-    hoursContributed: 234,
-  },
-  {
-    id: 4,
-    name: 'Emmanuel Obi',
-    email: 'emmanuel.obi@email.com',
-    phone: '+234 803 456 7890',
-    location: 'Abuja, Nigeria',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100',
-    status: 'active' as const,
-    joinDate: '2024-01-05',
-    skills: ['Healthcare', 'First Aid', 'Counseling'],
-    projects: ['Community Health Outreach'],
-    hoursContributed: 45,
-  },
-  {
-    id: 5,
-    name: 'Grace Mwangi',
-    email: 'grace.mwangi@email.com',
-    phone: '+254 723 456 789',
-    location: 'Mombasa, Kenya',
-    avatar: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=100',
-    status: 'active' as const,
-    joinDate: '2023-11-18',
-    skills: ['Photography', 'Social Media', 'Marketing'],
-    projects: ['Youth Education Initiative', 'Environmental Cleanup'],
-    hoursContributed: 112,
-  },
-];
+import { toast } from 'sonner';
+import { useAllUsers, useApproveUser, useBanUser, useUnbanUser } from '@/hooks/useUser';
 
 export default function Volunteers() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const filteredVolunteers = volunteers.filter((v) => {
-    const matchesSearch = v.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      v.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || v.status === statusFilter;
-    return matchesSearch && matchesStatus;
+  // Fetch volunteers from API
+  const { data: usersData, isLoading, error, refetch, isFetching } = useAllUsers({
+    role: 'volunteer',
+    search: searchQuery || undefined,
+    isApproved: statusFilter === 'approved' ? true : statusFilter === 'pending' ? false : undefined,
   });
+
+  const approveUserMutation = useApproveUser();
+  const banUserMutation = useBanUser();
+  const unbanUserMutation = useUnbanUser();
+
+  const volunteers = usersData?.data || [];
+
+  // Stats calculations
+  const totalVolunteers = volunteers.length;
+  const activeVolunteers = volunteers.filter((v: any) => v.isApproved && !v.isBanned).length;
+  const totalHours = volunteers.reduce((acc: number, v: any) => acc + (v.total_hours || 0), 0);
+  const avgHours = totalVolunteers > 0 ? Math.round(totalHours / totalVolunteers) : 0;
+
+  const handleApprove = async (userId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await approveUserMutation.mutateAsync(userId);
+      toast.success('Volunteer approved successfully');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to approve volunteer');
+    }
+  };
+
+  const handleBan = async (userId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await banUserMutation.mutateAsync(userId);
+      toast.success('Volunteer banned');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to ban volunteer');
+    }
+  };
+
+  const handleUnban = async (userId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await unbanUserMutation.mutateAsync(userId);
+      toast.success('Volunteer unbanned');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to unban volunteer');
+    }
+  };
+
+  const getStatusBadge = (volunteer: any) => {
+    if (volunteer.isBanned) {
+      return <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20">Banned</Badge>;
+    }
+    if (!volunteer.isApproved) {
+      return <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20">Pending</Badge>;
+    }
+    return <Badge variant="outline" className="bg-success/10 text-success border-success/20">Active</Badge>;
+  };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout title="Volunteers">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    const errorMessage =
+      (error as any)?.response?.data?.message ||
+      (error as any)?.message ||
+      "Failed to load volunteers. Please try again.";
+    return (
+      <DashboardLayout title="Volunteers">
+        <div className="max-w-xl">
+          <div className="rounded-xl bg-card card-shadow p-6">
+            <p className="text-lg font-semibold text-destructive mb-1">Couldn’t load volunteers</p>
+            <p className="text-sm text-muted-foreground mb-4">{errorMessage}</p>
+            <div className="flex gap-2">
+              <Button onClick={() => refetch()} disabled={isFetching}>
+                {isFetching ? "Retrying..." : "Retry"}
+              </Button>
+              <Button variant="outline" onClick={() => navigate("/dashboard")}>
+                Back to Dashboard
+              </Button>
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="Volunteers">
@@ -128,8 +149,8 @@ export default function Volunteers() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -138,21 +159,19 @@ export default function Volunteers() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <div className="rounded-xl bg-card card-shadow p-4">
           <p className="text-sm text-muted-foreground">Total Volunteers</p>
-          <p className="text-2xl font-bold text-foreground">{volunteers.length}</p>
+          <p className="text-2xl font-bold text-foreground">{totalVolunteers}</p>
         </div>
         <div className="rounded-xl bg-card card-shadow p-4">
           <p className="text-sm text-muted-foreground">Active</p>
-          <p className="text-2xl font-bold text-success">{volunteers.filter(v => v.status === 'active').length}</p>
+          <p className="text-2xl font-bold text-success">{activeVolunteers}</p>
         </div>
         <div className="rounded-xl bg-card card-shadow p-4">
           <p className="text-sm text-muted-foreground">Total Hours</p>
-          <p className="text-2xl font-bold text-primary">{volunteers.reduce((acc, v) => acc + v.hoursContributed, 0)}</p>
+          <p className="text-2xl font-bold text-primary">{totalHours}</p>
         </div>
         <div className="rounded-xl bg-card card-shadow p-4">
           <p className="text-sm text-muted-foreground">Avg Hours/Volunteer</p>
-          <p className="text-2xl font-bold text-foreground">
-            {Math.round(volunteers.reduce((acc, v) => acc + v.hoursContributed, 0) / volunteers.length)}
-          </p>
+          <p className="text-2xl font-bold text-foreground">{avgHours}</p>
         </div>
       </div>
 
@@ -170,78 +189,98 @@ export default function Volunteers() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredVolunteers.map((volunteer) => (
-              <TableRow 
-                key={volunteer.id} 
-                className="hover:bg-muted/30 transition-colors cursor-pointer"
-                onClick={() => navigate(`/volunteers/${volunteer.id}`)}
-              >
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <Avatar className="w-10 h-10">
-                      <AvatarImage src={volunteer.avatar} />
-                      <AvatarFallback>{volunteer.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium">{volunteer.name}</p>
-                      <p className="text-sm text-muted-foreground">{volunteer.email}</p>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell className="hidden md:table-cell text-muted-foreground">
-                  {volunteer.location}
-                </TableCell>
-                <TableCell className="hidden lg:table-cell">
-                  <div className="flex gap-1 flex-wrap">
-                    {volunteer.skills.slice(0, 2).map((skill) => (
-                      <Badge key={skill} variant="secondary" className="bg-primary/10 text-primary text-xs">
-                        {skill}
-                      </Badge>
-                    ))}
-                    {volunteer.skills.length > 2 && (
-                      <Badge variant="secondary" className="text-xs">+{volunteer.skills.length - 2}</Badge>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell className="hidden sm:table-cell">
-                  <Badge
-                    variant="outline"
-                    className={volunteer.status === 'active'
-                      ? 'bg-success/10 text-success border-success/20'
-                      : 'bg-muted text-muted-foreground'
-                    }
-                  >
-                    {volunteer.status.charAt(0).toUpperCase() + volunteer.status.slice(1)}
-                  </Badge>
-                </TableCell>
-                <TableCell className="hidden lg:table-cell font-medium">
-                  {volunteer.hoursContributed}h
-                </TableCell>
-                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => navigate(`/volunteers/${volunteer.id}`)}>
-                        <Eye className="w-4 h-4 mr-2" />
-                        View Details
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>
-                        <Mail className="w-4 h-4 mr-2" />
-                        Send Email
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive">
-                        <UserX className="w-4 h-4 mr-2" />
-                        Deactivate
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+            {volunteers.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  No volunteers found
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              volunteers.map((volunteer: any) => (
+                <TableRow
+                  key={volunteer._id}
+                  className="hover:bg-muted/30 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/volunteers/${volunteer._id}`)}
+                >
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <Avatar className="w-10 h-10">
+                        <AvatarImage src={volunteer.profile_picture} />
+                        <AvatarFallback>
+                          {volunteer.firstname?.[0]}{volunteer.lastname?.[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium">{volunteer.firstname} {volunteer.lastname}</p>
+                        <p className="text-sm text-muted-foreground">{volunteer.email}</p>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell text-muted-foreground">
+                    {volunteer.address || '-'}
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell">
+                    <div className="flex gap-1 flex-wrap">
+                      {(volunteer.skills || []).slice(0, 2).map((skill: string) => (
+                        <Badge key={skill} variant="secondary" className="bg-primary/10 text-primary text-xs">
+                          {skill}
+                        </Badge>
+                      ))}
+                      {(volunteer.skills || []).length > 2 && (
+                        <Badge variant="secondary" className="text-xs">
+                          +{(volunteer.skills || []).length - 2}
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden sm:table-cell">
+                    {getStatusBadge(volunteer)}
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell font-medium">
+                    {volunteer.total_hours || 0}h
+                  </TableCell>
+                  <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => navigate(`/volunteers/${volunteer._id}`)}>
+                          <Eye className="w-4 h-4 mr-2" />
+                          View Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>
+                          <Mail className="w-4 h-4 mr-2" />
+                          Send Email
+                        </DropdownMenuItem>
+                        {!volunteer.isApproved && (
+                          <DropdownMenuItem onClick={(e) => handleApprove(volunteer._id, e)}>
+                            <UserCheck className="w-4 h-4 mr-2" />
+                            Approve
+                          </DropdownMenuItem>
+                        )}
+                        {volunteer.isBanned ? (
+                          <DropdownMenuItem onClick={(e) => handleUnban(volunteer._id, e)}>
+                            <UserCheck className="w-4 h-4 mr-2" />
+                            Unban
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={(e) => handleBan(volunteer._id, e)}
+                          >
+                            <UserX className="w-4 h-4 mr-2" />
+                            Ban
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>

@@ -1,4 +1,5 @@
 import mongoose from "mongoose"
+import bcrypt from "bcryptjs"
 import KYC from "../models/Kyc.model.js"
 import User from "../models/User.model.js"
 
@@ -152,10 +153,227 @@ export const user_profile = async (req, res) => {
         if (!userProfile) {
             return res.status(404).json({ message: "User not found" })
         }
-        return res.status(200).json({ message: "User profile fetched successfully", data: userProfile })
+        return res.status(200).json({ success: true, message: "User profile fetched successfully", data: userProfile })
 
     } catch (error) {
         res.status(500).json({ message: "Error in user_profile controller", error: error })
     }
 }
 
+export const update_profile = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { firstname, lastname, email, phone, bio, address, profile_picture } = req.body;
+
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            {
+                firstname,
+                lastname,
+                email,
+                phone,
+                bio,
+                address,
+                profile_picture
+            },
+            { new: true, runValidators: true }
+        ).select("-password");
+
+        if (!updatedUser) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Profile updated successfully",
+            data: updatedUser
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Error in update_profile controller", error: error.message });
+    }
+}
+
+export const change_password = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { currentPassword, newPassword } = req.body;
+
+        if (!currentPassword || !newPassword) {
+            return res.status(400).json({ message: "Current password and new password are required" });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({ message: "New password must be at least 6 characters" });
+        }
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        const isMatch = await bcrypt.compare(currentPassword, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: "Current password is incorrect" });
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        user.password = hashedPassword;
+        await user.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Password changed successfully"
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Error in change_password controller", error: error.message });
+    }
+}
+
+export const get_all_users = async (req, res) => {
+    try {
+        const { role, isApproved, search, page = 1, limit = 20 } = req.query;
+
+        let query = {};
+
+        if (role) query.role = role;
+        if (isApproved !== undefined) query.isApproved = isApproved === 'true';
+        if (search) {
+            query.$or = [
+                { firstname: { $regex: search, $options: 'i' } },
+                { lastname: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
+                { username: { $regex: search, $options: 'i' } },
+            ];
+        }
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        const users = await User.find(query)
+            .select("-password")
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(parseInt(limit));
+
+        const total = await User.countDocuments(query);
+
+        return res.status(200).json({
+            success: true,
+            data: users,
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                total,
+                pages: Math.ceil(total / parseInt(limit))
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Error in get_all_users controller", error: error.message });
+    }
+}
+
+export const approve_user = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: "Invalid user ID" });
+        }
+
+        const user = await User.findByIdAndUpdate(
+            id,
+            { isApproved: true },
+            { new: true }
+        ).select("-password");
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: `${user.firstname} ${user.lastname} has been approved`,
+            data: user
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Error in approve_user controller", error: error.message });
+    }
+}
+
+export const ban_user = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: "Invalid user ID" });
+        }
+
+        const user = await User.findByIdAndUpdate(
+            id,
+            { isBanned: true },
+            { new: true }
+        ).select("-password");
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: `${user.firstname} ${user.lastname} has been banned`,
+            data: user
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Error in ban_user controller", error: error.message });
+    }
+}
+
+export const unban_user = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: "Invalid user ID" });
+        }
+
+        const user = await User.findByIdAndUpdate(
+            id,
+            { isBanned: false },
+            { new: true }
+        ).select("-password");
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: `${user.firstname} ${user.lastname} has been unbanned`,
+            data: user
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Error in unban_user controller", error: error.message });
+    }
+}
+
+export const get_user_by_id = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: "Invalid user ID" });
+        }
+
+        const user = await User.findById(id).select("-password");
+
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        return res.status(200).json({
+            success: true,
+            data: user
+        });
+    } catch (error) {
+        res.status(500).json({ message: "Error in get_user_by_id controller", error: error.message });
+    }
+}

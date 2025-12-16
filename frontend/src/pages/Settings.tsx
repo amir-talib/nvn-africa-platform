@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { User, Bell, Shield, Palette, Globe, Save } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { User, Bell, Shield, Palette, Globe, Save, Loader2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,14 +17,26 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
+import { useProfile, useUpdateProfile, useChangePassword } from '@/hooks/useUser';
 
 export default function Settings() {
+  const { data: userProfile, isLoading: profileLoading } = useProfile();
+  const updateProfileMutation = useUpdateProfile();
+  const changePasswordMutation = useChangePassword();
+
   const [profile, setProfile] = useState({
-    firstName: 'Admin',
-    lastName: 'User',
-    email: 'admin@namyo.org',
-    phone: '+234 801 234 5678',
-    bio: 'Administrator at NAMYO Africa with 5 years of experience in volunteer management and community development.',
+    firstname: '',
+    lastname: '',
+    email: '',
+    phone: '',
+    bio: '',
+    address: '',
+  });
+
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
   });
 
   const [notifications, setNotifications] = useState({
@@ -41,17 +53,71 @@ export default function Settings() {
     theme: 'light',
   });
 
-  const handleSaveProfile = () => {
-    toast.success('Profile updated successfully');
+  // Populate form when profile data loads
+  useEffect(() => {
+    if (userProfile) {
+      setProfile({
+        firstname: userProfile.firstname || '',
+        lastname: userProfile.lastname || '',
+        email: userProfile.email || '',
+        phone: userProfile.phone || '',
+        bio: userProfile.bio || '',
+        address: userProfile.address || '',
+      });
+    }
+  }, [userProfile]);
+
+  const handleSaveProfile = async () => {
+    try {
+      await updateProfileMutation.mutateAsync(profile);
+      toast.success('Profile updated successfully');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to update profile');
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
+    try {
+      await changePasswordMutation.mutateAsync({
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword,
+      });
+      toast.success('Password changed successfully');
+      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (error: any) {
+      toast.error(error?.response?.data?.message || 'Failed to change password');
+    }
   };
 
   const handleSaveNotifications = () => {
+    // TODO: Implement notification settings save to backend
     toast.success('Notification settings saved');
   };
 
   const handleSavePreferences = () => {
+    // TODO: Implement preferences save to backend
     toast.success('Preferences saved');
   };
+
+  if (profileLoading) {
+    return (
+      <DashboardLayout title="Settings">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="Settings">
@@ -82,8 +148,10 @@ export default function Settings() {
 
             <div className="flex items-center gap-6 mb-8">
               <Avatar className="w-24 h-24">
-                <AvatarImage src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200" />
-                <AvatarFallback className="text-2xl">AU</AvatarFallback>
+                <AvatarImage src={userProfile?.profile_picture} />
+                <AvatarFallback className="text-2xl">
+                  {profile.firstname?.[0]}{profile.lastname?.[0]}
+                </AvatarFallback>
               </Avatar>
               <div>
                 <Button variant="outline" size="sm">Change Photo</Button>
@@ -93,19 +161,19 @@ export default function Settings() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <Label htmlFor="firstName">First Name</Label>
+                <Label htmlFor="firstname">First Name</Label>
                 <Input
-                  id="firstName"
-                  value={profile.firstName}
-                  onChange={(e) => setProfile({ ...profile, firstName: e.target.value })}
+                  id="firstname"
+                  value={profile.firstname}
+                  onChange={(e) => setProfile({ ...profile, firstname: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="lastName">Last Name</Label>
+                <Label htmlFor="lastname">Last Name</Label>
                 <Input
-                  id="lastName"
-                  value={profile.lastName}
-                  onChange={(e) => setProfile({ ...profile, lastName: e.target.value })}
+                  id="lastname"
+                  value={profile.lastname}
+                  onChange={(e) => setProfile({ ...profile, lastname: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
@@ -125,6 +193,18 @@ export default function Settings() {
                   onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="address">Address</Label>
+                <Input
+                  id="address"
+                  value={profile.address}
+                  onChange={(e) => setProfile({ ...profile, address: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <Input value={userProfile?.role || ''} disabled className="bg-muted" />
+              </div>
               <div className="space-y-2 md:col-span-2">
                 <Label htmlFor="bio">Bio</Label>
                 <Textarea
@@ -132,13 +212,22 @@ export default function Settings() {
                   value={profile.bio}
                   onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
                   rows={4}
+                  placeholder="Tell us about yourself..."
                 />
               </div>
             </div>
 
             <div className="flex justify-end mt-6">
-              <Button onClick={handleSaveProfile} className="gradient-primary text-primary-foreground">
-                <Save className="w-4 h-4 mr-2" />
+              <Button
+                onClick={handleSaveProfile}
+                className="gradient-primary text-primary-foreground"
+                disabled={updateProfileMutation.isPending}
+              >
+                {updateProfileMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4 mr-2" />
+                )}
                 Save Changes
               </Button>
             </div>
@@ -308,20 +397,42 @@ export default function Settings() {
               <div className="space-y-4 max-w-md">
                 <div className="space-y-2">
                   <Label htmlFor="currentPassword">Current Password</Label>
-                  <Input id="currentPassword" type="password" />
+                  <Input
+                    id="currentPassword"
+                    type="password"
+                    value={passwordData.currentPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="newPassword">New Password</Label>
-                  <Input id="newPassword" type="password" />
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    value={passwordData.newPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                  <Input id="confirmPassword" type="password" />
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    value={passwordData.confirmPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                  />
                 </div>
               </div>
 
               <div className="flex justify-end mt-6">
-                <Button className="gradient-primary text-primary-foreground">
+                <Button
+                  onClick={handleChangePassword}
+                  className="gradient-primary text-primary-foreground"
+                  disabled={changePasswordMutation.isPending}
+                >
+                  {changePasswordMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : null}
                   Update Password
                 </Button>
               </div>

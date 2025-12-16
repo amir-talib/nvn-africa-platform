@@ -5,55 +5,28 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Progress } from '@/components/ui/progress';
-import { 
-  ArrowLeft, 
-  Mail, 
-  Phone, 
-  MapPin, 
+import {
+  ArrowLeft,
+  Mail,
+  Phone,
+  MapPin,
   Calendar,
   Clock,
   CheckCircle,
   FolderKanban,
   MessageSquare,
   Star,
-  TrendingUp
+  TrendingUp,
+  Loader2
 } from 'lucide-react';
+import { useUserById } from '@/hooks/useUser';
 
 const MobilizerVolunteerDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  // Mock volunteer data
-  const volunteer = {
-    id: Number(id),
-    name: 'Sarah Okonkwo',
-    email: 'sarah.o@email.com',
-    phone: '+234 801 234 5678',
-    location: 'Lagos, Nigeria',
-    status: 'active',
-    role: 'Field Volunteer',
-    joinDate: 'March 2024',
-    avatar: 'SO',
-    bio: 'Passionate community health advocate with 3 years of volunteer experience. Specializes in health education and community outreach programs.',
-    stats: {
-      hoursContributed: 156,
-      tasksCompleted: 42,
-      projectsJoined: 8,
-      rating: 4.8
-    },
-    skills: ['Community Outreach', 'Health Education', 'Event Planning', 'First Aid'],
-    recentProjects: [
-      { id: 1, name: 'Community Health Camp', role: 'Field Support', status: 'ongoing', hours: 24 },
-      { id: 2, name: 'Youth Education Drive', role: 'Coordinator', status: 'completed', hours: 36 },
-      { id: 3, name: 'Environmental Clean-up', role: 'Team Lead', status: 'completed', hours: 18 },
-    ],
-    activityLog: [
-      { date: 'Dec 10', action: 'Completed training session', type: 'achievement' },
-      { date: 'Dec 8', action: 'Joined Community Health Camp', type: 'project' },
-      { date: 'Dec 5', action: 'Submitted volunteer report', type: 'task' },
-      { date: 'Dec 3', action: 'Attended team meeting', type: 'meeting' },
-    ]
-  };
+  // Fetch real volunteer data from MongoDB
+  const { data: userData, isLoading, error } = useUserById(id);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -64,14 +37,66 @@ const MobilizerVolunteerDetails = () => {
     }
   };
 
+  if (isLoading) {
+    return (
+      <>
+        <MobilizerHeader title="Volunteer Details" subtitle="Loading..." />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-mobilizer" />
+        </div>
+      </>
+    );
+  }
+
+  if (error || !userData) {
+    return (
+      <>
+        <MobilizerHeader title="Volunteer Details" subtitle="Error" />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <Card className="max-w-md">
+            <CardContent className="p-6 text-center">
+              <p className="text-destructive mb-4">Failed to load volunteer details.</p>
+              <Button onClick={() => navigate('/mobilizer/volunteers')}>Back to Volunteers</Button>
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    );
+  }
+
+  // Transform user data
+  const volunteer = {
+    id: userData._id,
+    name: `${userData.firstname || ''} ${userData.lastname || ''}`.trim() || 'Unknown',
+    email: userData.email || 'No email',
+    phone: userData.phone || 'No phone',
+    location: userData.address || 'Location not specified',
+    status: userData.isBanned ? 'inactive' : userData.isApproved ? 'active' : 'pending',
+    role: userData.rank?.replace(/_/g, ' ') || 'Volunteer',
+    joinDate: userData.createdAt ? new Date(userData.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'Unknown',
+    avatar: `${(userData.firstname || 'U')[0]}${(userData.lastname || 'V')[0]}`,
+    profilePicture: userData.profile_picture,
+    bio: userData.bio || 'No bio available.',
+    stats: {
+      hoursContributed: userData.total_hours || 0,
+      tasksCompleted: 0,
+      projectsJoined: userData.no_of_projects_done || 0,
+      rating: 0
+    },
+    skills: userData.skills || [],
+    recentProjects: [],
+    activityLog: []
+  };
+
+
   return (
     <>
       <MobilizerHeader title="Volunteer Details" subtitle={volunteer.name} />
-      
+
       <div className="flex-1 overflow-auto p-6 space-y-6">
         {/* Back Button */}
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           onClick={() => navigate('/mobilizer/volunteers')}
           className="text-muted-foreground hover:text-foreground"
         >
@@ -89,7 +114,7 @@ const MobilizerVolunteerDetails = () => {
                   {volunteer.avatar}
                 </AvatarFallback>
               </Avatar>
-              
+
               <div className="flex-1">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
@@ -107,7 +132,7 @@ const MobilizerVolunteerDetails = () => {
                     </Button>
                   </div>
                 </div>
-                
+
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Mail className="w-4 h-4" />
@@ -126,9 +151,9 @@ const MobilizerVolunteerDetails = () => {
                     Joined {volunteer.joinDate}
                   </div>
                 </div>
-                
+
                 <p className="text-sm text-muted-foreground mt-4">{volunteer.bio}</p>
-                
+
                 <div className="flex flex-wrap gap-2 mt-4">
                   {volunteer.skills.map((skill) => (
                     <Badge key={skill} variant="secondary" className="bg-mobilizer-accent text-mobilizer-accent-foreground">
@@ -181,8 +206,8 @@ const MobilizerVolunteerDetails = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               {volunteer.recentProjects.map((project) => (
-                <div 
-                  key={project.id} 
+                <div
+                  key={project.id}
                   className="p-4 border border-border rounded-lg hover:border-mobilizer/50 cursor-pointer transition-colors"
                   onClick={() => navigate(`/mobilizer/projects/${project.id}`)}
                 >

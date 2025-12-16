@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, Grid, List } from 'lucide-react';
+import { Plus, Search, Filter, Grid, List, Loader2 } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { ProjectsTable } from '@/components/dashboard/ProjectsTable';
 import { ProjectFormModal } from '@/components/modals/ProjectFormModal';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -16,86 +15,88 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-
-const projects = [
-  {
-    id: 1,
-    name: 'Youth Education Initiative',
-    description: 'Providing educational resources and mentoring to youth in underserved communities.',
-    status: 'active',
-    startDate: '2024-01-15',
-    endDate: '2024-06-30',
-    lead: { name: 'Sarah Johnson', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100' },
-    volunteers: 24,
-    progress: 65,
-  },
-  {
-    id: 2,
-    name: 'Community Health Outreach',
-    description: 'Health awareness campaigns and free medical screenings in rural areas.',
-    status: 'completed',
-    startDate: '2023-09-01',
-    endDate: '2024-02-28',
-    lead: { name: 'Michael Chen', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100' },
-    volunteers: 18,
-    progress: 100,
-  },
-  {
-    id: 3,
-    name: 'Environmental Cleanup',
-    description: 'Beach and community cleanup drives to promote environmental sustainability.',
-    status: 'pending',
-    startDate: '2024-03-01',
-    endDate: '2024-05-15',
-    lead: { name: 'Amara Okonkwo', avatar: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=100' },
-    volunteers: 32,
-    progress: 0,
-  },
-  {
-    id: 4,
-    name: 'Tech Skills Workshop',
-    description: 'Teaching digital literacy and coding skills to young adults.',
-    status: 'active',
-    startDate: '2024-02-01',
-    endDate: '2024-08-31',
-    lead: { name: 'David Mensah', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100' },
-    volunteers: 15,
-    progress: 40,
-  },
-];
+import { useProjects } from '@/hooks/useProjects';
 
 const statusColors: Record<string, string> = {
+  ongoing: 'bg-success/10 text-success border-success/20',
   active: 'bg-success/10 text-success border-success/20',
   completed: 'bg-muted text-muted-foreground border-muted',
+  upcoming: 'bg-warning/10 text-warning border-warning/20',
   pending: 'bg-warning/10 text-warning border-warning/20',
 };
 
 export default function Projects() {
   const [showProjectModal, setShowProjectModal] = useState(false);
-  const [editingProject, setEditingProject] = useState<typeof projects[0] | null>(null);
+  const [editingProject, setEditingProject] = useState<any | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const navigate = useNavigate();
 
-  const filteredProjects = projects.filter((p) => {
-    const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+  // Fetch projects from API
+  const { data: projects = [], isLoading, error } = useProjects();
+
+  const filteredProjects = projects.filter((p: any) => {
+    const matchesSearch = p.title?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const handleViewProject = (id: number) => {
+  const handleViewProject = (id: string) => {
     navigate(`/projects/${id}`);
   };
 
-  const handleEditProject = (id: number) => {
-    const project = projects.find(p => p.id === id);
+  const handleEditProject = (id: string) => {
+    const project = projects.find((p: any) => p._id === id);
     if (project) {
       setEditingProject(project);
       setShowProjectModal(true);
     }
   };
+
+  // Calculate progress based on dates
+  const calculateProgress = (startDate: string, endDate: string, status: string) => {
+    if (status === 'completed') return 100;
+    if (status === 'upcoming') return 0;
+
+    const start = new Date(startDate).getTime();
+    const end = new Date(endDate).getTime();
+    const now = Date.now();
+
+    if (now <= start) return 0;
+    if (now >= end) return 100;
+
+    return Math.round(((now - start) / (end - start)) * 100);
+  };
+
+  if (isLoading) {
+    return (
+      <DashboardLayout title="Projects">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <DashboardLayout title="Projects">
+        <div className="flex items-center justify-center h-64 text-destructive">
+          Failed to load projects. Please try again.
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout title="Projects">
@@ -118,8 +119,8 @@ export default function Projects() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="ongoing">Ongoing</SelectItem>
+              <SelectItem value="upcoming">Upcoming</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
             </SelectContent>
           </Select>
@@ -154,53 +155,130 @@ export default function Projects() {
         </div>
       </div>
 
+      {/* Stats Summary */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="rounded-xl bg-card card-shadow p-4">
+          <p className="text-sm text-muted-foreground">Total Projects</p>
+          <p className="text-2xl font-bold text-foreground">{projects.length}</p>
+        </div>
+        <div className="rounded-xl bg-card card-shadow p-4">
+          <p className="text-sm text-muted-foreground">Ongoing</p>
+          <p className="text-2xl font-bold text-success">
+            {projects.filter((p: any) => p.status === 'ongoing').length}
+          </p>
+        </div>
+        <div className="rounded-xl bg-card card-shadow p-4">
+          <p className="text-sm text-muted-foreground">Upcoming</p>
+          <p className="text-2xl font-bold text-warning">
+            {projects.filter((p: any) => p.status === 'upcoming').length}
+          </p>
+        </div>
+        <div className="rounded-xl bg-card card-shadow p-4">
+          <p className="text-sm text-muted-foreground">Completed</p>
+          <p className="text-2xl font-bold text-muted-foreground">
+            {projects.filter((p: any) => p.status === 'completed').length}
+          </p>
+        </div>
+      </div>
+
       {/* Content */}
-      {viewMode === 'grid' ? (
+      {filteredProjects.length === 0 ? (
+        <div className="rounded-xl bg-card card-shadow p-12 text-center">
+          <p className="text-muted-foreground">No projects found</p>
+        </div>
+      ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {filteredProjects.map((project) => (
-            <div
-              key={project.id}
-              className="rounded-xl bg-card card-shadow p-6 hover:card-shadow-hover transition-shadow cursor-pointer"
-              onClick={() => handleViewProject(project.id)}
-            >
-              <div className="flex items-start justify-between mb-4">
-                <Badge variant="outline" className={statusColors[project.status]}>
-                  {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
-                </Badge>
-                <span className="text-sm text-muted-foreground">
-                  {project.volunteers} volunteers
-                </span>
-              </div>
-
-              <h3 className="text-lg font-semibold text-foreground mb-2">{project.name}</h3>
-              <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{project.description}</p>
-
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Avatar className="w-6 h-6">
-                    <AvatarImage src={project.lead.avatar} />
-                    <AvatarFallback>{project.lead.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
-                  </Avatar>
-                  <span className="text-sm text-muted-foreground">{project.lead.name}</span>
+          {filteredProjects.map((project: any) => {
+            const progress = calculateProgress(project.start_date, project.end_date, project.status);
+            return (
+              <div
+                key={project._id}
+                className="rounded-xl bg-card card-shadow p-6 hover:card-shadow-hover transition-shadow cursor-pointer"
+                onClick={() => handleViewProject(project._id)}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <Badge variant="outline" className={statusColors[project.status] || statusColors.pending}>
+                    {project.status?.charAt(0).toUpperCase() + project.status?.slice(1)}
+                  </Badge>
+                  <span className="text-sm text-muted-foreground">
+                    {project.volunteers?.length || 0} volunteers
+                  </span>
                 </div>
 
-                <div className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Progress</span>
-                    <span className="font-medium">{project.progress}%</span>
+                <h3 className="text-lg font-semibold text-foreground mb-2">{project.title}</h3>
+                <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{project.description}</p>
+
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span>📍 {project.location || 'No location'}</span>
                   </div>
-                  <Progress value={project.progress} className="h-2" />
-                </div>
 
-                <div className="text-xs text-muted-foreground">
-                  {new Date(project.startDate).toLocaleDateString()} - {new Date(project.endDate).toLocaleDateString()}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Progress</span>
+                      <span className="font-medium">{progress}%</span>
+                    </div>
+                    <Progress value={progress} className="h-2" />
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">
+                    {project.start_date ? new Date(project.start_date).toLocaleDateString() : 'TBD'} - {project.end_date ? new Date(project.end_date).toLocaleDateString() : 'TBD'}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
-        <ProjectsTable onViewProject={handleViewProject} onEditProject={handleEditProject} />
+        <div className="rounded-xl bg-card card-shadow overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableHead className="font-semibold">Project</TableHead>
+                <TableHead className="font-semibold hidden md:table-cell">Location</TableHead>
+                <TableHead className="font-semibold hidden sm:table-cell">Status</TableHead>
+                <TableHead className="font-semibold hidden lg:table-cell">Volunteers</TableHead>
+                <TableHead className="font-semibold hidden lg:table-cell">Progress</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredProjects.map((project: any) => {
+                const progress = calculateProgress(project.start_date, project.end_date, project.status);
+                return (
+                  <TableRow
+                    key={project._id}
+                    className="hover:bg-muted/30 transition-colors cursor-pointer"
+                    onClick={() => handleViewProject(project._id)}
+                  >
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{project.title}</p>
+                        <p className="text-sm text-muted-foreground line-clamp-1">{project.description}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground">
+                      {project.location || '-'}
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <Badge variant="outline" className={statusColors[project.status] || statusColors.pending}>
+                        {project.status?.charAt(0).toUpperCase() + project.status?.slice(1)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      {project.volunteers?.length || 0}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell">
+                      <div className="flex items-center gap-2">
+                        <Progress value={progress} className="h-2 w-20" />
+                        <span className="text-sm">{progress}%</span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
       )}
 
       <ProjectFormModal
@@ -210,13 +288,13 @@ export default function Projects() {
           setEditingProject(null);
         }}
         project={editingProject ? {
-          id: editingProject.id,
-          name: editingProject.name,
+          id: editingProject._id,
+          name: editingProject.title,
           description: editingProject.description,
           status: editingProject.status,
-          startDate: editingProject.startDate,
-          endDate: editingProject.endDate,
-          leadId: '1',
+          startDate: editingProject.start_date,
+          endDate: editingProject.end_date,
+          leadId: editingProject.project_lead,
         } : undefined}
       />
     </DashboardLayout>

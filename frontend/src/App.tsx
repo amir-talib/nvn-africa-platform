@@ -40,6 +40,7 @@ import MobilizerSettings from "./pages/mobilizer/MobilizerSettings";
 import MobilizerPerformance from "./pages/mobilizer/MobilizerPerformance";
 import MobilizerVolunteerDetails from "./pages/mobilizer/MobilizerVolunteerDetails";
 import MobilizerProjectDetails from "./pages/mobilizer/MobilizerProjectDetails";
+import MobilizerHoursVerification from "./pages/mobilizer/MobilizerHoursVerification";
 
 // Volunteer Dashboard imports
 import VolunteerLayout from "./components/layout/VolunteerLayout";
@@ -50,10 +51,30 @@ import VolunteerMyProjects from "./pages/volunteer/VolunteerMyProjects";
 import VolunteerNotifications from "./pages/volunteer/VolunteerNotifications";
 import VolunteerProfile from "./pages/volunteer/VolunteerProfile";
 import VolunteerSettings from "./pages/volunteer/VolunteerSettings";
+import VolunteerHours from "./pages/volunteer/VolunteerHours";
 
 import GuestRoutes from './utils/GuestRoutes'
 
-const queryClient = new QueryClient();
+// Optimized QueryClient with aggressive caching for fast navigation
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Keep data fresh for 5 minutes before refetching
+      staleTime: 5 * 60 * 1000,
+      // Cache data for 30 minutes
+      gcTime: 30 * 60 * 1000, // Previously called cacheTime
+      // Don't refetch on window focus (reduces API calls)
+      refetchOnWindowFocus: false,
+      // Don't refetch on mount if data exists and isn't stale
+      refetchOnMount: false,
+      // Retry failed requests once
+      retry: 1,
+      // Show stale data while fetching fresh data
+      placeholderData: (previousData: any) => previousData,
+    },
+  },
+});
+
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -105,19 +126,22 @@ const App = () => (
           <Route path="/settings" element={<Settings />} />
 
           {/* Mobilizer Dashboard Routes */}
-          <Route path="/mobilizer" element={<MobilizerLayout />}>
-            <Route index element={<MobilizerDashboard />} />
-            <Route path="volunteers" element={<MobilizerVolunteers />} />
-            <Route path="volunteers/:id" element={<MobilizerVolunteerDetails />} />
-            <Route path="projects" element={<MobilizerProjects />} />
-            <Route path="projects/:id" element={<MobilizerProjectDetails />} />
-            <Route path="team" element={<MobilizerTeam />} />
-            <Route path="requests" element={<MobilizerRequests />} />
-            <Route path="messages" element={<MobilizerMessages />} />
-            <Route path="calendar" element={<MobilizerCalendar />} />
-            <Route path="updates" element={<MobilizerUpdates />} />
-            <Route path="settings" element={<MobilizerSettings />} />
-            <Route path="performance" element={<MobilizerPerformance />} />
+          <Route element={<ProtectedRoutes requiredRole={["mobilizer", "admin"]} />}>
+            <Route path="/mobilizer" element={<MobilizerLayout />}>
+              <Route index element={<MobilizerDashboard />} />
+              <Route path="volunteers" element={<MobilizerVolunteers />} />
+              <Route path="volunteers/:id" element={<MobilizerVolunteerDetails />} />
+              <Route path="projects" element={<MobilizerProjects />} />
+              <Route path="projects/:id" element={<MobilizerProjectDetails />} />
+              <Route path="team" element={<MobilizerTeam />} />
+              <Route path="requests" element={<MobilizerRequests />} />
+              <Route path="messages" element={<MobilizerMessages />} />
+              <Route path="calendar" element={<MobilizerCalendar />} />
+              <Route path="updates" element={<MobilizerUpdates />} />
+              <Route path="settings" element={<MobilizerSettings />} />
+              <Route path="performance" element={<MobilizerPerformance />} />
+              <Route path="hours-verification" element={<MobilizerHoursVerification />} />
+            </Route>
           </Route>
 
           {/* Volunteer Dashboard Routes */}
@@ -130,6 +154,7 @@ const App = () => (
               <Route path="notifications" element={<VolunteerNotifications />} />
               <Route path="profile" element={<VolunteerProfile />} />
               <Route path="settings" element={<VolunteerSettings />} />
+              <Route path="hours" element={<VolunteerHours />} />
             </Route>
           </Route>
 

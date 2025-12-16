@@ -10,10 +10,18 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
 import { Heart, ArrowLeft, ArrowRight, Eye, EyeOff, CalendarIcon, Check, Sparkles, User, Mail, Phone, Lock, MapPin } from "lucide-react";
-import { format } from "date-fns";
+import { format, setMonth, setYear } from "date-fns";
 import { cn } from "@/lib/utils";
-import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
+import { api } from "@/lib/api";
+
+// Year options for DOB (last 100 years)
+const currentYear = new Date().getFullYear();
+const years = Array.from({ length: 100 }, (_, i) => currentYear - i);
+const months = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
 
 
 
@@ -47,30 +55,45 @@ const VolunteerAuth = () => {
     setErrors({});
     setIsLoading(true);
     try {
-      // Build payload from signupData
+      // Validate inputs
+      if (!loginData.email || !loginData.password) {
+        const errorMsg = "Please enter both email and password";
+        setErrors({ general: errorMsg });
+        toast.error(errorMsg);
+        setIsLoading(false);
+        return;
+      }
+
       const payload = {
         email: loginData.email,
         password: loginData.password,
       };
 
-      const response = await axios.post("http://localhost:3000/api/auth/login", payload);
+      const response = await api.post(`/auth/login`, payload);
       console.debug("Login response:", response);
 
       if (response.data?.success) {
+        toast.success("Login successful!");
         login(response.data.user, response.data.token);
         console.log(response.data.user.role)
+        // Route based on user role
         if (response.data.user.role === "admin") {
           navigate("/dashboard")
+        } else if (response.data.user.role === "mobilizer") {
+          navigate("/mobilizer")
         } else {
           navigate("/volunteer")
         }
 
       } else {
-        setErrors({ general: response.data?.message || "Login failed" });
-
+        const errorMsg = response.data?.message || "Login failed";
+        setErrors({ general: errorMsg });
+        toast.error(errorMsg);
       }
     } catch (error: any) {
-      setErrors({ general: error?.response?.data?.message || "An error occurred during login" });
+      const errorMsg = error?.response?.data?.message || "An error occurred during login";
+      setErrors({ general: errorMsg });
+      toast.error(errorMsg);
       console.error("Login error response:", error?.response ?? error);
     } finally {
       setIsLoading(false);
@@ -99,7 +122,7 @@ const VolunteerAuth = () => {
 
       };
 
-      const response = await axios.post("http://localhost:3000/api/auth/register", payload);
+      const response = await api.post(`/auth/register`, payload);
       // console.log("Response from backend:", response.data);
 
       if (response.data?.success) {
@@ -387,10 +410,50 @@ const VolunteerAuth = () => {
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0 bg-card" align="start">
+                          <div className="flex gap-2 p-3 border-b">
+                            <Select
+                              value={signupData.date_of_birth ? String(signupData.date_of_birth.getMonth()) : undefined}
+                              onValueChange={(value) => {
+                                const date = signupData.date_of_birth || new Date();
+                                setSignupData({ ...signupData, date_of_birth: setMonth(date, parseInt(value)) });
+                              }}
+                            >
+                              <SelectTrigger className="w-[110px] h-8 text-xs">
+                                <SelectValue placeholder="Month" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-card max-h-[200px]">
+                                {months.map((month, index) => (
+                                  <SelectItem key={month} value={String(index)} className="text-xs">
+                                    {month}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select
+                              value={signupData.date_of_birth ? String(signupData.date_of_birth.getFullYear()) : undefined}
+                              onValueChange={(value) => {
+                                const date = signupData.date_of_birth || new Date();
+                                setSignupData({ ...signupData, date_of_birth: setYear(date, parseInt(value)) });
+                              }}
+                            >
+                              <SelectTrigger className="w-[80px] h-8 text-xs">
+                                <SelectValue placeholder="Year" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-card max-h-[200px]">
+                                {years.map((year) => (
+                                  <SelectItem key={year} value={String(year)} className="text-xs">
+                                    {year}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
                           <Calendar
                             mode="single"
                             selected={signupData.date_of_birth}
                             onSelect={(date) => setSignupData({ ...signupData, date_of_birth: date })}
+                            month={signupData.date_of_birth || new Date()}
+                            onMonthChange={(date) => setSignupData({ ...signupData, date_of_birth: date })}
                             disabled={(date) => date > new Date() || date < new Date("1920-01-01")}
                             initialFocus
                             className="pointer-events-auto"

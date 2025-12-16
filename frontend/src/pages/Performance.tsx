@@ -10,12 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { TrendingUp, TrendingDown, Clock, Award, Users, Target } from 'lucide-react';
+import { TrendingUp, Clock, Award, Users, Target, Loader2 } from 'lucide-react';
 import {
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
   BarChart,
   Bar,
   XAxis,
@@ -24,64 +20,81 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
+  PieChart,
+  Pie,
+  Cell,
 } from 'recharts';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useStats, useProjects } from '@/hooks/useProjects';
+import { useAllUsers } from '@/hooks/useUser';
 
-const monthlyHoursData = [
-  { month: 'Jul', hours: 120, target: 150 },
-  { month: 'Aug', hours: 180, target: 150 },
-  { month: 'Sep', hours: 165, target: 150 },
-  { month: 'Oct', hours: 210, target: 180 },
-  { month: 'Nov', hours: 195, target: 180 },
-  { month: 'Dec', hours: 240, target: 200 },
-  { month: 'Jan', hours: 280, target: 220 },
-];
-
-const volunteerPerformance = [
-  { month: 'Jul', active: 45, new: 12, churned: 5 },
-  { month: 'Aug', active: 52, new: 15, churned: 8 },
-  { month: 'Sep', active: 58, new: 18, churned: 12 },
-  { month: 'Oct', active: 64, new: 22, churned: 16 },
-  { month: 'Nov', active: 72, new: 25, churned: 17 },
-  { month: 'Dec', active: 80, new: 28, churned: 20 },
-  { month: 'Jan', active: 89, new: 32, churned: 23 },
-];
-
-const projectCompletionData = [
-  { month: 'Jul', completed: 3, started: 5 },
-  { month: 'Aug', completed: 4, started: 3 },
-  { month: 'Sep', completed: 2, started: 6 },
-  { month: 'Oct', completed: 5, started: 4 },
-  { month: 'Nov', completed: 4, started: 5 },
-  { month: 'Dec', completed: 6, started: 3 },
-  { month: 'Jan', completed: 5, started: 7 },
-];
-
-const topVolunteers = [
-  { id: 1, name: 'Fatima Diallo', avatar: 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=100', hours: 156, projects: 4, trend: 12 },
-  { id: 3, name: 'Aisha Mohammed', avatar: 'https://images.unsplash.com/photo-1489424731084-a5d8b219a5bb?w=100', hours: 234, projects: 3, trend: 8 },
-  { id: 5, name: 'Grace Mwangi', avatar: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=100', hours: 112, projects: 5, trend: 15 },
-  { id: 2, name: 'Kwame Asante', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100', hours: 89, projects: 2, trend: -3 },
-  { id: 4, name: 'Emmanuel Obi', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100', hours: 45, projects: 1, trend: 25 },
-];
-
-const kpiMetrics = [
-  { label: 'Avg Hours/Volunteer', value: '127', change: 12, isPositive: true, icon: Clock },
-  { label: 'Retention Rate', value: '85%', change: 5, isPositive: true, icon: Users },
-  { label: 'Goal Achievement', value: '92%', change: 8, isPositive: true, icon: Target },
-  { label: 'Certifications Earned', value: '34', change: 15, isPositive: true, icon: Award },
-];
+const COLORS = ['hsl(var(--success))', 'hsl(var(--primary))', 'hsl(var(--warning))'];
 
 export default function Performance() {
   const [timeRange, setTimeRange] = useState('6months');
   const navigate = useNavigate();
 
+  // Fetch real data
+  const { data: stats, isLoading: statsLoading } = useStats();
+  const { data: projects = [], isLoading: projectsLoading } = useProjects();
+  const { data: volunteersData, isLoading: volunteersLoading } = useAllUsers({ role: 'volunteer' });
+
+  const volunteers = volunteersData?.data || [];
+  const isLoading = statsLoading || projectsLoading || volunteersLoading;
+
+  // Calculate real stats
+  const totalHours = volunteers.reduce((acc: number, v: any) => acc + (v.total_hours || 0), 0);
+  const avgHours = volunteers.length > 0 ? Math.round(totalHours / volunteers.length) : 0;
+  const activeVolunteers = volunteers.filter((v: any) => v.isApproved && !v.isBanned).length;
+  const completedProjects = projects.filter((p: any) => p.status === 'completed').length;
+  const ongoingProjects = projects.filter((p: any) => p.status === 'ongoing').length;
+  const upcomingProjects = projects.filter((p: any) => p.status === 'upcoming').length;
+
+  // KPI Metrics from real data
+  const kpiMetrics = [
+    { label: 'Total Hours', value: totalHours.toString(), icon: Clock },
+    { label: 'Active Volunteers', value: activeVolunteers.toString(), icon: Users },
+    { label: 'Completed Projects', value: completedProjects.toString(), icon: Target },
+    { label: 'Lives Impacted', value: (stats?.livesImpacted || 0).toString(), icon: Award },
+  ];
+
+  // Top volunteers by hours
+  const topVolunteers = [...volunteers]
+    .sort((a: any, b: any) => (b.total_hours || 0) - (a.total_hours || 0))
+    .slice(0, 5);
+
+  // Project status distribution for pie chart
+  const projectStatusData = [
+    { name: 'Completed', value: completedProjects },
+    { name: 'Ongoing', value: ongoingProjects },
+    { name: 'Upcoming', value: upcomingProjects },
+  ].filter(d => d.value > 0);
+
+  // Volunteer rank distribution
+  const rankDistribution = volunteers.reduce((acc: any, v: any) => {
+    const rank = v.rank || 'Newcomer';
+    acc[rank] = (acc[rank] || 0) + 1;
+    return acc;
+  }, {});
+
+  const rankData = Object.entries(rankDistribution).map(([name, value]) => ({ name, value }));
+
+  if (isLoading) {
+    return (
+      <DashboardLayout title="Performance Tracking">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout title="Performance Tracking">
       {/* Time Range Filter */}
       <div className="flex justify-between items-center mb-6">
-        <p className="text-muted-foreground">Track volunteer and project performance over time</p>
+        <p className="text-muted-foreground">Track volunteer and project performance</p>
         <Select value={timeRange} onValueChange={setTimeRange}>
           <SelectTrigger className="w-40">
             <SelectValue placeholder="Time Range" />
@@ -104,16 +117,6 @@ export default function Performance() {
                 <div>
                   <p className="text-sm text-muted-foreground">{metric.label}</p>
                   <p className="text-2xl font-bold text-foreground mt-1">{metric.value}</p>
-                  <div className="flex items-center gap-1 mt-2">
-                    {metric.isPositive ? (
-                      <TrendingUp className="w-4 h-4 text-success" />
-                    ) : (
-                      <TrendingDown className="w-4 h-4 text-destructive" />
-                    )}
-                    <span className={metric.isPositive ? 'text-success text-sm' : 'text-destructive text-sm'}>
-                      {metric.isPositive ? '+' : ''}{metric.change}%
-                    </span>
-                  </div>
                 </div>
                 <div className="p-3 rounded-xl bg-primary/10">
                   <metric.icon className="w-5 h-5 text-primary" />
@@ -124,161 +127,80 @@ export default function Performance() {
         ))}
       </div>
 
-      {/* Charts Row 1 */}
-      <div className="grid lg:grid-cols-2 gap-6 mb-6">
-        {/* Hours Contributed Over Time */}
-        <Card className="card-shadow">
-          <CardHeader>
-            <CardTitle className="text-base">Hours Contributed vs Target</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={monthlyHoursData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
-                />
-                <Legend />
-                <Area
-                  type="monotone"
-                  dataKey="hours"
-                  name="Actual Hours"
-                  stroke="hsl(var(--primary))"
-                  fill="hsl(var(--primary) / 0.2)"
-                  strokeWidth={2}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="target"
-                  name="Target"
-                  stroke="hsl(var(--muted-foreground))"
-                  strokeDasharray="5 5"
-                  strokeWidth={2}
-                  dot={false}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* Volunteer Activity */}
-        <Card className="card-shadow">
-          <CardHeader>
-            <CardTitle className="text-base">Volunteer Activity Trends</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={volunteerPerformance}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
-                />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="active"
-                  name="Active"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  dot={{ fill: 'hsl(var(--primary))' }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="new"
-                  name="New"
-                  stroke="hsl(var(--success))"
-                  strokeWidth={2}
-                  dot={{ fill: 'hsl(var(--success))' }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="churned"
-                  name="Churned"
-                  stroke="hsl(var(--destructive))"
-                  strokeWidth={2}
-                  dot={{ fill: 'hsl(var(--destructive))' }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Charts Row 2 */}
+      {/* Charts Row */}
       <div className="grid lg:grid-cols-3 gap-6 mb-6">
-        {/* Project Completion */}
-        <Card className="card-shadow lg:col-span-2">
+        {/* Project Status Distribution */}
+        <Card className="card-shadow">
           <CardHeader>
-            <CardTitle className="text-base">Project Completion Rate</CardTitle>
+            <CardTitle className="text-base">Project Status</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={projectCompletionData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
-                />
-                <Legend />
-                <Bar dataKey="completed" name="Completed" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="started" name="Started" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {projectStatusData.length === 0 ? (
+              <div className="h-[250px] flex items-center justify-center text-muted-foreground">
+                No project data
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={projectStatusData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    {projectStatusData.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
 
         {/* Top Performers */}
-        <Card className="card-shadow">
+        <Card className="card-shadow lg:col-span-2">
           <CardHeader>
-            <CardTitle className="text-base">Top Performers</CardTitle>
+            <CardTitle className="text-base">Top Volunteers by Hours</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {topVolunteers.slice(0, 5).map((volunteer, index) => (
-              <div
-                key={volunteer.id}
-                className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
-                onClick={() => navigate(`/volunteers/${volunteer.id}`)}
-              >
-                <span className="text-sm font-bold text-muted-foreground w-5">#{index + 1}</span>
-                <Avatar className="w-8 h-8">
-                  <AvatarImage src={volunteer.avatar} />
-                  <AvatarFallback className="text-xs">
-                    {volunteer.name.split(' ').map(n => n[0]).join('')}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{volunteer.name}</p>
-                  <p className="text-xs text-muted-foreground">{volunteer.hours}h • {volunteer.projects} projects</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  {volunteer.trend > 0 ? (
-                    <TrendingUp className="w-3 h-3 text-success" />
-                  ) : (
-                    <TrendingDown className="w-3 h-3 text-destructive" />
-                  )}
-                  <span className={volunteer.trend > 0 ? 'text-xs text-success' : 'text-xs text-destructive'}>
-                    {volunteer.trend > 0 ? '+' : ''}{volunteer.trend}%
-                  </span>
-                </div>
+            {topVolunteers.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                No volunteer data yet
               </div>
-            ))}
+            ) : (
+              topVolunteers.map((volunteer: any, index: number) => (
+                <div
+                  key={volunteer._id}
+                  className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                  onClick={() => navigate(`/volunteers/${volunteer._id}`)}
+                >
+                  <span className="text-sm font-bold text-muted-foreground w-5">#{index + 1}</span>
+                  <Avatar className="w-8 h-8">
+                    <AvatarImage src={volunteer.profile_picture} />
+                    <AvatarFallback className="text-xs">
+                      {volunteer.firstname?.[0]}{volunteer.lastname?.[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {volunteer.firstname} {volunteer.lastname}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {volunteer.total_hours || 0}h • {volunteer.no_of_projects_done || 0} projects
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                    {volunteer.rank || 'Newcomer'}
+                  </Badge>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
       </div>
@@ -286,17 +208,17 @@ export default function Performance() {
       {/* Goals Progress */}
       <Card className="card-shadow">
         <CardHeader>
-          <CardTitle className="text-base">Organization Goals Progress</CardTitle>
+          <CardTitle className="text-base">Organization Overview</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { label: 'Annual Volunteer Hours', current: 12500, target: 15000, unit: 'hours' },
-              { label: 'New Volunteers', current: 89, target: 100, unit: 'volunteers' },
-              { label: 'Projects Completed', current: 29, target: 35, unit: 'projects' },
-              { label: 'Community Reach', current: 4500, target: 5000, unit: 'people' },
+              { label: 'Total Volunteer Hours', current: totalHours, target: Math.max(totalHours * 1.2, 1000), unit: 'hours' },
+              { label: 'Active Volunteers', current: activeVolunteers, target: Math.max(activeVolunteers * 1.2, 50), unit: 'volunteers' },
+              { label: 'Projects Completed', current: completedProjects, target: Math.max(projects.length, 10), unit: 'projects' },
+              { label: 'Communities Reached', current: stats?.communitiesReached || 0, target: Math.max((stats?.communitiesReached || 0) * 1.5, 10), unit: 'communities' },
             ].map((goal) => {
-              const progress = Math.round((goal.current / goal.target) * 100);
+              const progress = goal.target > 0 ? Math.min(Math.round((goal.current / goal.target) * 100), 100) : 0;
               return (
                 <div key={goal.label} className="space-y-3">
                   <div className="flex justify-between items-center">
@@ -307,7 +229,7 @@ export default function Performance() {
                   </div>
                   <Progress value={progress} className="h-2" />
                   <p className="text-xs text-muted-foreground">
-                    {goal.current.toLocaleString()} / {goal.target.toLocaleString()} {goal.unit}
+                    {goal.current.toLocaleString()} / {Math.round(goal.target).toLocaleString()} {goal.unit}
                   </p>
                 </div>
               );

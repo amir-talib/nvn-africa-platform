@@ -6,91 +6,79 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Calendar, 
-  MapPin, 
-  Clock, 
+import {
+  Calendar,
+  MapPin,
+  Clock,
   ArrowRight,
   CheckCircle,
   AlertCircle,
-  Users
+  Users,
+  Loader2,
+  FolderKanban
 } from 'lucide-react';
+import { useMyApprovedProjects } from '@/hooks/useProjects';
+import { useMyHours } from '@/hooks/useHours';
 
 const VolunteerMyProjects = () => {
   const navigate = useNavigate();
 
-  const projects = [
-    {
-      id: 1,
-      name: 'Community Health Camp',
-      description: 'Free health screening and medical assistance',
-      status: 'ongoing',
-      progress: 65,
-      location: 'Lagos, Nigeria',
-      date: 'Dec 15-20, 2024',
-      hoursLogged: 24,
-      tasksCompleted: 8,
-      totalTasks: 12,
-      role: 'Field Volunteer'
-    },
-    {
-      id: 2,
-      name: 'Environmental Clean-up',
-      description: 'Beach cleaning initiative',
-      status: 'ongoing',
-      progress: 40,
-      location: 'Accra, Ghana',
-      date: 'Dec 18, 2024',
-      hoursLogged: 6,
-      tasksCompleted: 3,
-      totalTasks: 8,
-      role: 'Team Member'
-    },
-    {
-      id: 3,
-      name: 'Youth Education Drive',
-      description: 'After-school tutoring program',
-      status: 'pending',
-      progress: 0,
-      location: 'Nairobi, Kenya',
-      date: 'Dec 25, 2024',
-      hoursLogged: 0,
-      tasksCompleted: 0,
-      totalTasks: 10,
-      role: 'Tutor'
-    },
-    {
-      id: 4,
-      name: 'Women Empowerment Workshop',
-      description: 'Skills training for women',
-      status: 'completed',
-      progress: 100,
-      location: 'Addis Ababa, Ethiopia',
-      date: 'Nov 20-25, 2024',
-      hoursLogged: 36,
-      tasksCompleted: 10,
-      totalTasks: 10,
-      role: 'Workshop Facilitator'
-    },
-    {
-      id: 5,
-      name: 'Food Distribution Drive',
-      description: 'Distributing food to families',
-      status: 'completed',
-      progress: 100,
-      location: 'Kampala, Uganda',
-      date: 'Oct 15-16, 2024',
-      hoursLogged: 16,
-      tasksCompleted: 8,
-      totalTasks: 8,
-      role: 'Logistics Support'
-    },
-  ];
+  // Fetch real data from MongoDB
+  const { data: projectsData, isLoading: projectsLoading, error } = useMyApprovedProjects();
+  const { data: hoursData, isLoading: hoursLoading } = useMyHours();
+
+  const isLoading = projectsLoading || hoursLoading;
+
+  // Transform project data
+  const projects = (projectsData || []).map((project: any) => ({
+    id: project._id,
+    name: project.title,
+    description: project.description || 'No description available',
+    status: project.status || 'upcoming',
+    progress: getProjectProgress(project),
+    location: project.location || 'Location TBD',
+    date: formatProjectDate(project.start_date, project.end_date),
+    hoursLogged: 0, // Will get from hours data
+    tasksCompleted: 0,
+    totalTasks: project.requirements?.length || 5,
+    role: 'Volunteer'
+  }));
+
+  // Calculate hours per project from hoursData
+  const hoursEntries = hoursData?.data?.hours || [];
+  projects.forEach((project: any) => {
+    const projectHours = hoursEntries
+      .filter((h: any) => h.project?._id === project.id && h.status === 'verified')
+      .reduce((sum: number, h: any) => sum + (h.hours || 0), 0);
+    project.hoursLogged = projectHours;
+  });
+
+  function formatProjectDate(startDate?: string, endDate?: string): string {
+    if (!startDate) return 'Date TBD';
+    const start = new Date(startDate);
+    const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    if (!endDate) return startStr;
+    const end = new Date(endDate);
+    const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return `${startStr} - ${endStr}`;
+  }
+
+  function getProjectProgress(project: any): number {
+    switch (project.status) {
+      case 'completed': return 100;
+      case 'ongoing':
+      case 'active': return 50;
+      case 'upcoming': return 0;
+      default: return 0;
+    }
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'ongoing': return 'bg-primary/10 text-primary';
-      case 'pending': return 'bg-warning/10 text-warning-foreground';
+      case 'ongoing':
+      case 'active': return 'bg-primary/10 text-primary';
+      case 'pending':
+      case 'upcoming': return 'bg-warning/10 text-warning-foreground';
       case 'completed': return 'bg-success/10 text-success';
       default: return 'bg-muted text-muted-foreground';
     }
@@ -98,18 +86,20 @@ const VolunteerMyProjects = () => {
 
   const filterProjects = (status: string) => {
     if (status === 'all') return projects;
-    return projects.filter(p => p.status === status);
+    if (status === 'ongoing') return projects.filter((p: any) => p.status === 'ongoing' || p.status === 'active');
+    if (status === 'pending') return projects.filter((p: any) => p.status === 'upcoming');
+    return projects.filter((p: any) => p.status === status);
   };
 
   const stats = {
-    ongoing: projects.filter(p => p.status === 'ongoing').length,
-    pending: projects.filter(p => p.status === 'pending').length,
-    completed: projects.filter(p => p.status === 'completed').length,
-    totalHours: projects.reduce((sum, p) => sum + p.hoursLogged, 0)
+    ongoing: projects.filter((p: any) => p.status === 'ongoing' || p.status === 'active').length,
+    pending: projects.filter((p: any) => p.status === 'upcoming').length,
+    completed: projects.filter((p: any) => p.status === 'completed').length,
+    totalHours: hoursData?.data?.stats?.total_verified || 0
   };
 
   const ProjectCard = ({ project }: { project: typeof projects[0] }) => (
-    <Card 
+    <Card
       className="hover:border-primary/50 cursor-pointer transition-all"
       onClick={() => navigate(`/volunteer/projects/${project.id}`)}
     >
@@ -136,7 +126,7 @@ const VolunteerMyProjects = () => {
           </span>
         </div>
 
-        {project.status !== 'pending' && (
+        {project.status !== 'upcoming' && (
           <div className="space-y-3">
             <div>
               <div className="flex items-center justify-between text-sm mb-1">
@@ -149,27 +139,51 @@ const VolunteerMyProjects = () => {
               <span className="text-muted-foreground flex items-center gap-1">
                 <Clock className="w-4 h-4" /> {project.hoursLogged} hours logged
               </span>
-              <span className="text-muted-foreground flex items-center gap-1">
-                <CheckCircle className="w-4 h-4" /> {project.tasksCompleted}/{project.totalTasks} tasks
-              </span>
             </div>
           </div>
         )}
 
-        {project.status === 'pending' && (
+        {project.status === 'upcoming' && (
           <div className="flex items-center gap-2 text-warning-foreground bg-warning/10 p-3 rounded-lg">
             <AlertCircle className="w-4 h-4" />
-            <span className="text-sm">Awaiting approval from project lead</span>
+            <span className="text-sm">Project starting soon</span>
           </div>
         )}
       </CardContent>
     </Card>
   );
 
+  if (isLoading) {
+    return (
+      <>
+        <VolunteerHeader title="My Projects" subtitle="Loading..." />
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </>
+    );
+  }
+
+  if (error) {
+    return (
+      <>
+        <VolunteerHeader title="My Projects" subtitle="Error loading projects" />
+        <div className="flex-1 flex items-center justify-center p-6">
+          <Card className="max-w-md">
+            <CardContent className="p-6 text-center">
+              <p className="text-destructive mb-4">Failed to load your projects. Please try again.</p>
+              <Button onClick={() => window.location.reload()}>Retry</Button>
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <VolunteerHeader title="My Projects" subtitle="Track your volunteering journey" />
-      
+
       <div className="flex-1 overflow-auto p-6 space-y-6">
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -182,7 +196,7 @@ const VolunteerMyProjects = () => {
           <Card>
             <CardContent className="p-4 text-center">
               <p className="text-2xl font-bold text-warning">{stats.pending}</p>
-              <p className="text-sm text-muted-foreground">Pending</p>
+              <p className="text-sm text-muted-foreground">Upcoming</p>
             </CardContent>
           </Card>
           <Card>
@@ -204,22 +218,27 @@ const VolunteerMyProjects = () => {
           <TabsList className="grid w-full grid-cols-4 max-w-md">
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="ongoing">Ongoing</TabsTrigger>
-            <TabsTrigger value="pending">Pending</TabsTrigger>
+            <TabsTrigger value="pending">Upcoming</TabsTrigger>
             <TabsTrigger value="completed">Completed</TabsTrigger>
           </TabsList>
 
           {['all', 'ongoing', 'pending', 'completed'].map((status) => (
             <TabsContent key={status} value={status} className="mt-6">
               <div className="grid md:grid-cols-2 gap-4">
-                {filterProjects(status).map((project) => (
+                {filterProjects(status).map((project: any) => (
                   <ProjectCard key={project.id} project={project} />
                 ))}
               </div>
               {filterProjects(status).length === 0 && (
                 <div className="text-center py-12">
-                  <p className="text-muted-foreground">No {status} projects found.</p>
-                  <Button 
-                    variant="outline" 
+                  <FolderKanban className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+                  <p className="text-muted-foreground">
+                    {status === 'all'
+                      ? "You haven't joined any projects yet."
+                      : `No ${status === 'pending' ? 'upcoming' : status} projects found.`}
+                  </p>
+                  <Button
+                    variant="outline"
                     className="mt-4 text-primary border-primary"
                     onClick={() => navigate('/volunteer/projects')}
                   >
